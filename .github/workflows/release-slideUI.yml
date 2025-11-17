@@ -4,7 +4,7 @@ on:
   push:
     branches: [ main ]
     paths:
-      - src/pptm/slideUI.xlam
+      - src/pptm/slideUI.pptm
 jobs:
   release:
     runs-on: windows-latest
