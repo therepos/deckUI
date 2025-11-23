@@ -23,7 +23,7 @@ jobs:
       - run: >
           New-Item -ItemType Directory -Force -Path src\rel | Out-Null;
           Compress-Archive -Path
-          src\pptm\deckUI.pptm,src\cmd\deckUIsetup.cmd
+          src\pptm\deckUI.ppam,src\cmd\deckUIsetup.cmd
           -DestinationPath src\rel\deckUI.zip -Force
       - uses: softprops/action-gh-release@v2
         with:
