@@ -184,6 +184,44 @@ Sub SelectedTableBorders()
     End If
 End Sub
 
+Sub SelectedTableShade()
+    Dim shp As Shape
+    Dim tbl As Table
+    Dim r As Long, c As Long
+    Const LIGHT_GREY As Long = &HF2F2F2   ' RGB(242,242,242)
+
+    ' Get the table from the current selection
+    On Error Resume Next
+    If ActiveWindow.Selection.Type = ppSelectionShapes _
+       And ActiveWindow.Selection.ShapeRange(1).HasTable Then
+        Set tbl = ActiveWindow.Selection.ShapeRange(1).Table
+    ElseIf ActiveWindow.Selection.Type = ppSelectionText _
+       And ActiveWindow.Selection.TextRange.Parent.HasTable Then
+        Set tbl = ActiveWindow.Selection.TextRange.Parent.Table
+    End If
+    On Error GoTo 0
+
+    If tbl Is Nothing Then
+        MsgBox "Please select a table first.", vbExclamation
+        Exit Sub
+    End If
+
+    ' Row 1 is header – skip it
+    For r = 2 To tbl.Rows.Count
+        For c = 1 To tbl.Columns.Count
+            With tbl.Cell(r, c).Shape.Fill
+                If r Mod 2 = 0 Then
+                    .Visible = msoTrue
+                    .ForeColor.RGB = LIGHT_GREY
+                    .Solid
+                Else
+                    .Visible = msoFalse   ' no color
+                End If
+            End With
+        Next c
+    Next r
+End Sub
+
 Sub TableNormalMargin()
     Dim sld As Slide
     Dim shp As Shape
