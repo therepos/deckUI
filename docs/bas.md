@@ -1,0 +1,273 @@
+# VBA modules
+
+_This file is generated automatically from `.bas` files in `src/bas`._
+
+## Module `Ribbon`
+
+### `RibbonOnLoad`
+
+```vbnet
+Public Sub RibbonOnLoad(r As IRibbonUI)
+    Set Ribbon = r
+End Sub
+```
+
+### `RunByName`
+
+```vbnet
+Public Sub RunByName(control As IRibbonControl)
+    Dim macro As String
+    macro = control.Tag
+    If Len(macro) = 0 Then macro = control.Id
+    On Error GoTo errh
+    Application.Run macro
+    Exit Sub
+errh:
+    MsgBox "Macro not found: " & macro, vbExclamation
+End Sub
+```
+
+## Module `Subs`
+
+### `FontArial`
+
+```vbnet
+Sub FontArial()
+    Dim sld As Slide
+    Dim shp As Shape
+    Dim tbl As Table
+    Dim row As Long, col As Long
+    
+    ' Loop through all slides
+    For Each sld In ActivePresentation.Slides
+        ' Loop through all shapes in each slide
+        For Each shp In sld.Shapes
+            ' Check if shape has text
+            If shp.HasTextFrame Then
+                If shp.TextFrame.HasText Then
+                    shp.TextFrame.TextRange.Font.Name = "Arial"
+                End If
+            End If
+            
+            ' Check if shape is a table
+            If shp.HasTable Then
+                Set tbl = shp.Table
+                For row = 1 To tbl.Rows.Count
+                    For col = 1 To tbl.Columns.Count
+                        tbl.Cell(row, col).Shape.TextFrame.TextRange.Font.Name = "Arial"
+                    Next col
+                Next row
+            End If
+        Next shp
+    Next sld
+End Sub
+```
+
+### `FontEY`
+
+```vbnet
+Sub FontEY()
+    Dim sld As Slide
+    Dim shp As Shape
+    Dim tbl As Table
+    Dim row As Long, col As Long
+    
+    ' Loop through all slides
+    For Each sld In ActivePresentation.Slides
+        ' Loop through all shapes in each slide
+        For Each shp In sld.Shapes
+            ' Check if shape has text
+            If shp.HasTextFrame Then
+                If shp.TextFrame.HasText Then
+                    shp.TextFrame.TextRange.Font.Name = "EYInterstate Light"
+                End If
+            End If
+            
+            ' Check if shape is a table
+            If shp.HasTable Then
+                Set tbl = shp.Table
+                For row = 1 To tbl.Rows.Count
+                    For col = 1 To tbl.Columns.Count
+                        tbl.Cell(row, col).Shape.TextFrame.TextRange.Font.Name = "EYInterstate Light"
+                    Next col
+                Next row
+            End If
+        Next shp
+    Next sld
+End Sub
+```
+
+### `FontSize12`
+
+```vbnet
+Sub FontSize12()
+    Dim sld As Slide
+    Dim shp As Shape
+    Dim tbl As Table
+    Dim row As Long, col As Long
+    
+    ' Loop through all slides
+    For Each sld In ActivePresentation.Slides
+        ' Loop through all shapes in each slide
+        For Each shp In sld.Shapes
+            ' Check if shape has text
+            If shp.HasTextFrame Then
+                If shp.TextFrame.HasText Then
+                    With shp.TextFrame.TextRange.Font
+                        .Size = 12
+                    End With
+                End If
+            End If
+            
+            ' Check if shape is a table
+            If shp.HasTable Then
+                Set tbl = shp.Table
+                For row = 1 To tbl.Rows.Count
+                    For col = 1 To tbl.Columns.Count
+                        With tbl.Cell(row, col).Shape.TextFrame.TextRange.Font
+                            .Size = 12
+                        End With
+                    Next col
+                Next row
+            End If
+        Next shp
+    Next sld
+End Sub
+```
+
+### `FontSizeUp`
+
+```vbnet
+Sub FontSizeUp()
+    Dim sld As Slide
+    Dim shp As Shape
+    Dim tbl As Table
+    Dim r As Long, c As Long
+    
+    For Each sld In ActivePresentation.Slides
+        For Each shp In sld.Shapes
+            If shp.HasTextFrame Then
+                If shp.TextFrame.HasText Then
+                    shp.TextFrame.TextRange.Font.Size = shp.TextFrame.TextRange.Font.Size + 1
+                End If
+            End If
+            
+            If shp.HasTable Then
+                Set tbl = shp.Table
+                For r = 1 To tbl.Rows.Count
+                    For c = 1 To tbl.Columns.Count
+                        tbl.Cell(r, c).Shape.TextFrame.TextRange.Font.Size = _
+                            tbl.Cell(r, c).Shape.TextFrame.TextRange.Font.Size + 1
+                    Next c
+                Next r
+            End If
+        Next shp
+    Next sld
+End Sub
+```
+
+### `FontSizeDown`
+
+```vbnet
+Sub FontSizeDown()
+    Dim sld As Slide
+    Dim shp As Shape
+    Dim tbl As Table
+    Dim r As Long, c As Long
+    
+    For Each sld In ActivePresentation.Slides
+        For Each shp In sld.Shapes
+            If shp.HasTextFrame Then
+                If shp.TextFrame.HasText Then
+                    shp.TextFrame.TextRange.Font.Size = shp.TextFrame.TextRange.Font.Size - 1
+                End If
+            End If
+            
+            If shp.HasTable Then
+                Set tbl = shp.Table
+                For r = 1 To tbl.Rows.Count
+                    For c = 1 To tbl.Columns.Count
+                        tbl.Cell(r, c).Shape.TextFrame.TextRange.Font.Size = _
+                            tbl.Cell(r, c).Shape.TextFrame.TextRange.Font.Size - 1
+                    Next c
+                Next r
+            End If
+        Next shp
+    Next sld
+End Sub
+```
+
+### `SelectedTableBorders`
+
+```vbnet
+Sub SelectedTableBorders()
+    Dim shp As Shape
+    Dim tbl As Table
+    Dim r As Long, c As Long
+    
+    If ActiveWindow.Selection.Type = ppSelectionShapes Then
+        Set shp = ActiveWindow.Selection.ShapeRange(1)
+        If shp.HasTable Then
+            Set tbl = shp.Table
+            For r = 1 To tbl.Rows.Count
+                For c = 1 To tbl.Columns.Count
+                    With tbl.Cell(r, c).Borders(ppBorderTop)
+                        .Weight = 1
+                        .ForeColor.RGB = RGB(0, 0, 0)
+                    End With
+                    With tbl.Cell(r, c).Borders(ppBorderBottom)
+                        .Weight = 1
+                        .ForeColor.RGB = RGB(0, 0, 0)
+                    End With
+                    With tbl.Cell(r, c).Borders(ppBorderLeft)
+                        .Weight = 1
+                        .ForeColor.RGB = RGB(0, 0, 0)
+                    End With
+                    With tbl.Cell(r, c).Borders(ppBorderRight)
+                        .Weight = 1
+                        .ForeColor.RGB = RGB(0, 0, 0)
+                    End With
+                Next c
+            Next r
+        Else
+            MsgBox "Selected shape is not a table."
+        End If
+    Else
+        MsgBox "Please select a table first."
+    End If
+End Sub
+```
+
+### `TableNormalMargin`
+
+```vbnet
+Sub TableNormalMargin()
+    Dim sld As Slide
+    Dim shp As Shape
+    Dim tbl As Table
+    Dim row As Long, col As Long
+    
+    ' Loop through all slides
+    For Each sld In ActivePresentation.Slides
+        ' Loop through all shapes in each slide
+        For Each shp In sld.Shapes
+            ' Check if shape is a table
+            If shp.HasTable Then
+                Set tbl = shp.Table
+                ' Loop through all cells in the table
+                For row = 1 To tbl.Rows.Count
+                    For col = 1 To tbl.Columns.Count
+                        With tbl.Cell(row, col).Shape.TextFrame
+                            ' Apply Normal margins (default in PowerPoint)
+                            .MarginTop = 3    ' Normal top margin
+                            .MarginBottom = 3 ' Normal bottom margin
+                            .MarginLeft = 3   ' Normal left margin
+                            .MarginRight = 3  ' Normal right margin
+                        End With
+                    Next col
+                Next row
+            End If
+        Next shp
+    Next sld
+End Sub
+```
