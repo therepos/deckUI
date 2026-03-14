@@ -3435,19 +3435,20 @@ Private Sub InsertTableFormula(funcName As String)
     Dim cnt As Long
     Dim finalVal As Double
 
-    ' --- Find selected table and cell ---
     If Not GetSelectedTableAndCell(tbl, targetRow, targetCol) Then
-        MsgBox "Please place your cursor in a table cell.", vbExclamation, "Table Formula"
+        MsgBox "Please place your cursor in a table cell.", _
+               vbExclamation, "Table Formula"
         Exit Sub
     End If
 
-    ' --- Read numeric values from cells above ---
+    ' Read numeric values from cells above
     total = 0
     cnt = 0
 
     For r = 1 To targetRow - 1
         On Error Resume Next
-        cellText = CleanNumericText(tbl.Cell(r, targetCol).Shape.TextFrame.TextRange.Text)
+        cellText = CleanNumericText( _
+            tbl.Cell(r, targetCol).Shape.TextFrame.TextRange.Text)
         On Error GoTo 0
 
         If IsNumeric(cellText) And Len(cellText) > 0 Then
@@ -3457,7 +3458,7 @@ Private Sub InsertTableFormula(funcName As String)
         End If
     Next r
 
-    ' --- Calculate ---
+    ' Calculate
     Select Case UCase(funcName)
         Case "SUM"
             finalVal = total
@@ -3471,632 +3472,9 @@ Private Sub InsertTableFormula(funcName As String)
             finalVal = cnt
     End Select
 
-    ' --- Write result to cell ---
-    tbl.Cell(targetRow, targetCol).Shape.TextFrame.TextRange.Text = Format(finalVal, "0.00")
-
-End Sub
-```
-
-### `SelFormatNumDecimal`
-
-```vbnet
-Public Sub SelFormatNumDecimal()
-    FormatSelectedCells "#,##0.00", ""
-End Sub
-```
-
-### `SelFormatNumNoDecimal`
-
-```vbnet
-Public Sub SelFormatNumNoDecimal()
-    FormatSelectedCells "#,##0", ""
-End Sub
-```
-
-### `SelFormatNumDollar`
-
-```vbnet
-Public Sub SelFormatNumDollar()
-    FormatSelectedCells "#,##0.00", "$"
-End Sub
-```
-
-### `FormatSelectedCells`
-
-```vbnet
-Private Sub FormatSelectedCells(fmt As String, prefix As String)
-
-    Dim tbl As Table
-    Dim selRow As Long, selCol As Long
-    Dim cells As Collection
-    Dim cellCoord As Variant
-    Dim r As Long, c As Long
-    Dim cellText As String
-    Dim val As Double
-    Dim result As String
-    Dim tr As TextRange
-
-    ' --- Try to get selected cells ---
-    Set cells = GetSelectedCells(tbl)
-
-    If cells Is Nothing Then
-        ' Maybe text is selected outside a table
-        If ActiveWindow.Selection.Type = ppSelectionText Then
-            Dim selText As String
-            selText = ActiveWindow.Selection.TextRange.Text
-            selText = CleanNumericText(selText)
-            If IsNumeric(selText) And Len(selText) > 0 Then
-                val = CDbl(selText)
-                ActiveWindow.Selection.TextRange.Text = FormatValue(val, fmt, prefix)
-            End If
-        Else
-            MsgBox "Please select table cell(s) or text containing a number.", vbExclamation, "Number Format"
-        End If
-        Exit Sub
-    End If
-
-    ' --- Format each selected cell ---
-    For Each cellCoord In cells
-        r = cellCoord(0)
-        c = cellCoord(1)
-
-        On Error Resume Next
-        Set tr = tbl.Cell(r, c).Shape.TextFrame.TextRange
-        On Error GoTo 0
-        If tr Is Nothing Then GoTo NextCell
-
-        cellText = CleanNumericText(tr.Text)
-
-        If IsNumeric(cellText) And Len(cellText) > 0 Then
-            val = CDbl(cellText)
-            result = FormatValue(val, fmt, prefix)
-            tr.Text = result
-            tr.ParagraphFormat.Alignment = ppAlignRight
-        End If
-
-NextCell:
-        Set tr = Nothing
-    Next cellCoord
-
-End Sub
-```
-
-### `FormatValue`
-
-```vbnet
-Private Function FormatValue(val As Double, fmt As String, prefix As String) As String
-    Dim result As String
-    If val < 0 Then
-        result = "(" & Format(Abs(val), fmt) & ")"
-    Else
-        result = Format(val, fmt)
-    End If
-    If Len(prefix) > 0 Then
-        result = prefix & " " & result
-    End If
-    FormatValue = result
-End Function
-```
-
-### `SelFormatDateShort`
-
-```vbnet
-Public Sub SelFormatDateShort()
-    FormatDateInSelection "DD-MMM-YY"
-End Sub
-```
-
-### `SelFormatDateLong`
-
-```vbnet
-Public Sub SelFormatDateLong()
-    FormatDateInSelection "DD-MMMM-YYYY"
-End Sub
-```
-
-### `FormatDateInSelection`
-
-```vbnet
-Private Sub FormatDateInSelection(fmt As String)
-
-    Dim tbl As Table
-    Dim cells As Collection
-    Dim cellCoord As Variant
-    Dim r As Long, c As Long
-    Dim cellText As String
-    Dim dt As Date
-    Dim tr As TextRange
-
-    ' --- Try to get selected cells ---
-    Set cells = GetSelectedCells(tbl)
-
-    If cells Is Nothing Then
-        ' Maybe text is selected outside a table
-        If ActiveWindow.Selection.Type = ppSelectionText Then
-            Dim selText As String
-            selText = Trim$(ActiveWindow.Selection.TextRange.Text)
-            If IsDate(selText) Then
-                dt = CDate(selText)
-                ActiveWindow.Selection.TextRange.Text = Format(dt, fmt)
-            End If
-        Else
-            MsgBox "Please select table cell(s) or text containing a date.", vbExclamation, "Date Format"
-        End If
-        Exit Sub
-    End If
-
-    ' --- Format each selected cell ---
-    For Each cellCoord In cells
-        r = cellCoord(0)
-        c = cellCoord(1)
-
-        On Error Resume Next
-        Set tr = tbl.Cell(r, c).Shape.TextFrame.TextRange
-        On Error GoTo 0
-        If tr Is Nothing Then GoTo NextDateCell
-
-        cellText = Trim$(tr.Text)
-        If IsDate(cellText) Then
-            dt = CDate(cellText)
-            tr.Text = Format(dt, fmt)
-        End If
-
-NextDateCell:
-        Set tr = Nothing
-    Next cellCoord
-
-End Sub
-```
-
-### `GetSelectedTableAndCell`
-
-```vbnet
-Private Function GetSelectedTableAndCell( _
-        ByRef tbl As Table, _
-        ByRef outRow As Long, _
-        ByRef outCol As Long) As Boolean
-    ' Returns True if the cursor is inside a table cell.
-    ' Sets tbl, outRow, outCol to the active cell.
-
-    Dim shp As Shape
-    Dim sel As Selection
-    Dim r As Long, c As Long
-
-    GetSelectedTableAndCell = False
-    Set sel = ActiveWindow.Selection
-
-    On Error Resume Next
-
-    ' Selection is inside a table cell (text cursor in cell)
-    If sel.Type = ppSelectionText Then
-        Set shp = sel.ShapeRange(1)
-        If Not shp Is Nothing Then
-            If shp.HasTable Then
-                Set tbl = shp.Table
-                ' Find which cell contains the selection
-                If FindCellByTextRange(tbl, sel.TextRange, outRow, outCol) Then
-                    GetSelectedTableAndCell = True
-                End If
-            End If
-        End If
-    End If
-
-    On Error GoTo 0
-
-End Function
-```
-
-### `FindCellByTextRange`
-
-```vbnet
-Private Function FindCellByTextRange( _
-        tbl As Table, _
-        selRange As TextRange, _
-        ByRef outRow As Long, _
-        ByRef outCol As Long) As Boolean
-    ' Identifies which cell the selection cursor is in by comparing
-    ' the TextRange object references.
-
-    Dim r As Long, c As Long
-    Dim cellTR As TextRange
-
-    FindCellByTextRange = False
-
-    On Error Resume Next
-    For r = 1 To tbl.Rows.Count
-        For c = 1 To tbl.Columns.Count
-            Set cellTR = tbl.Cell(r, c).Shape.TextFrame.TextRange
-            ' Compare the parent shape — if the selection's parent is
-            ' the same shape as the cell's, we found it
-            If selRange.Parent.Parent.Name = cellTR.Parent.Parent.Name Then
-                ' Further check: same text content as a tiebreaker
-                ' (not perfect but works for most layouts)
-                outRow = r
-                outCol = c
-                FindCellByTextRange = True
-                Exit Function
-            End If
-        Next c
-    Next r
-    On Error GoTo 0
-
-End Function
-```
-
-### `GetSelectedCells`
-
-```vbnet
-Private Function GetSelectedCells(ByRef tbl As Table) As Collection
-    ' Returns a Collection of Array(row, col) for all selected cells.
-    ' Returns Nothing if no table is selected.
-
-    Dim shp As Shape
-    Dim sel As Selection
-    Dim result As Collection
-    Dim r As Long, c As Long
-
-    Set GetSelectedCells = Nothing
-    Set sel = ActiveWindow.Selection
-
-    On Error Resume Next
-
-    ' Check if a table shape is selected
-    If sel.Type = ppSelectionShapes Or sel.Type = ppSelectionText Then
-        Set shp = sel.ShapeRange(1)
-        If shp Is Nothing Then Exit Function
-        If Not shp.HasTable Then Exit Function
-        Set tbl = shp.Table
-    Else
-        Exit Function
-    End If
-
-    On Error GoTo 0
-
-    Set result = New Collection
-
-    ' PowerPoint doesn't expose which cells are "selected" directly.
-    ' If text is selected, we identify the single active cell.
-    ' If the whole shape is selected, we include ALL cells.
-    If sel.Type = ppSelectionText Then
-        Dim foundRow As Long, foundCol As Long
-        If FindCellByTextRange(tbl, sel.TextRange, foundRow, foundCol) Then
-            result.Add Array(foundRow, foundCol)
-        End If
-    Else
-        ' Whole table shape selected — operate on all cells
-        For r = 1 To tbl.Rows.Count
-            For c = 1 To tbl.Columns.Count
-                result.Add Array(r, c)
-            Next c
-        Next r
-    End If
-
-    If result.Count > 0 Then
-        Set GetSelectedCells = result
-    End If
-
-End Function
-```
-
-### `CleanNumericText`
-
-```vbnet
-Private Function CleanNumericText(s As String) As String
-    ' Strips formatting characters from cell text for numeric parsing.
-
-    Dim t As String
-    t = Trim$(s)
-    t = Replace(t, ",", "")
-    t = Replace(t, "$", "")
-    t = Replace(t, vbTab, "")
-    t = Replace(t, vbCr, "")
-    t = Replace(t, vbLf, "")
-
-    ' Parentheses = negative
-    If InStr(t, "(") > 0 And InStr(t, ")") > 0 Then
-        t = Replace(t, "(", "-")
-        t = Replace(t, ")", "")
-    End If
-
-    CleanNumericText = Trim$(t)
-
-End Function
-```
-
-### `SelTableAutofit`
-
-```vbnet
-Sub SelTableAutofit()
-
-    Dim tbl As Table
-    Dim shp As Shape
-
-    Set shp = GetSelectedTableShape()
-    If shp Is Nothing Then
-        MsgBox "Please select a table or place your cursor inside one.", vbExclamation, "Autofit Table"
-        Exit Sub
-    End If
-    Set tbl = shp.Table
-
-    Dim r As Long, c As Long
-    Dim maxW As Single
-    Dim cellW As Single
-    Dim totalW As Single
-    Dim slideW As Single
-
-    On Error Resume Next
-
-    ' --- Pass 1: Autofit each column to its widest text ---
-    ' PPT has no native autofit for table columns, so we measure text width
-    ' and set column widths accordingly, with a minimum.
-    Const MIN_COL_W As Single = 36  ' ~0.5 inch minimum
-    Const H_PAD As Single = 14      ' padding per cell (left+right)
-
-    Dim colWidths() As Single
-    ReDim colWidths(1 To tbl.Columns.Count)
-
-    ' Initialise to minimum
-    For c = 1 To tbl.Columns.Count
-        colWidths(c) = MIN_COL_W
-    Next c
-
-    ' Measure each cell's text extent
-    For r = 1 To tbl.Rows.Count
-        For c = 1 To tbl.Columns.Count
-            Dim tr As TextRange
-            Set tr = tbl.Cell(r, c).Shape.TextFrame.TextRange
-            If Len(tr.Text) > 0 Then
-                ' Approximate width: character count * average char width
-                ' Use font size as a rough proxy (0.6 * fontSize per char)
-                Dim avgCharW As Single
-                avgCharW = tr.Font.Size * 0.55
-                cellW = Len(tr.Text) * avgCharW + H_PAD
-                If cellW > colWidths(c) Then colWidths(c) = cellW
-            End If
-        Next c
-    Next r
-
-    ' --- Pass 2: Scale columns proportionally to fit table shape width ---
-    totalW = 0
-    For c = 1 To tbl.Columns.Count
-        totalW = totalW + colWidths(c)
-    Next c
-
-    Dim targetW As Single
-    targetW = shp.Width  ' keep current table shape width
-
-    If totalW > 0 Then
-        Dim scale As Single
-        scale = targetW / totalW
-        For c = 1 To tbl.Columns.Count
-            tbl.Columns(c).Width = colWidths(c) * scale
-        Next c
-    End If
-
-    ' --- Pass 3: Minimise row heights ---
-    For r = 1 To tbl.Rows.Count
-        tbl.Rows(r).Height = 0  ' setting to 0 lets PPT auto-shrink to text
-    Next r
-
-    On Error GoTo 0
-
-    MsgBox "Table autofitted.", vbInformation, "Autofit Table"
-
-End Sub
-```
-
-### `SelTableReset`
-
-```vbnet
-Sub SelTableReset()
-
-    Dim tbl As Table
-    Dim shp As Shape
-
-    Set shp = GetSelectedTableShape()
-    If shp Is Nothing Then
-        MsgBox "Please select a table or place your cursor inside one.", vbExclamation, "Reset Table"
-        Exit Sub
-    End If
-    Set tbl = shp.Table
-
-    Dim r As Long, c As Long
-
-    On Error Resume Next
-
-    For r = 1 To tbl.Rows.Count
-        For c = 1 To tbl.Columns.Count
-
-            Dim cel As Cell
-            Set cel = tbl.Cell(r, c)
-
-            ' --- Clear cell fill ---
-            cel.Shape.Fill.Background  ' = no fill
-
-            ' --- Clear borders (all 4 sides) ---
-            cel.Borders(ppBorderTop).Visible = msoFalse
-            cel.Borders(ppBorderBottom).Visible = msoFalse
-            cel.Borders(ppBorderLeft).Visible = msoFalse
-            cel.Borders(ppBorderRight).Visible = msoFalse
-
-            ' --- Reset cell margins to PPT defaults ---
-            With cel.Shape.TextFrame
-                .MarginTop = CmToPt(0.13)
-                .MarginBottom = CmToPt(0.13)
-                .MarginLeft = CmToPt(0.25)
-                .MarginRight = CmToPt(0.25)
-                .WordWrap = msoTrue
-                .AutoSize = ppAutoSizeNone
-            End With
-
-            ' --- Reset text formatting ---
-            Dim tr As TextRange
-            Set tr = cel.Shape.TextFrame.TextRange
-
-            If Len(tr.Text) > 0 Then
-                With tr.Font
-                    .Name = "Calibri"
-                    .Size = 11
-                    .Bold = msoFalse
-                    .Italic = msoFalse
-                    .Underline = msoFalse
-                    .Color.RGB = RGB(0, 0, 0)
-                    .Shadow = msoFalse
-                End With
-
-                ' Reset paragraph formatting
-                Dim p As Long
-                For p = 1 To tr.Paragraphs.Count
-                    With tr.Paragraphs(p).ParagraphFormat
-                        .Alignment = ppAlignLeft
-                        .SpaceBefore = 0
-                        .SpaceAfter = 0
-                        .SpaceWithin = 1
-                        .WordWrap = msoTrue
-                    End With
-
-                    ' Reset indentation
-                    With tr.Paragraphs(p).ParagraphFormat
-                        .IndentLevel = 1  ' PPT indent level 1 = no indent
-                    End With
-
-                    ' Remove bullets/numbering
-                    tr.Paragraphs(p).ParagraphFormat.Bullet.Type = ppBulletNone
-                Next p
-            End If
-
-        Next c
-    Next r
-
-    ' --- Clear table-level style ---
-    ' Remove any applied table style by setting to "No Style, No Grid"
-    shp.Table.ApplyStyle "{2D5ABB26-0587-4C30-8999-92F81FD0307C}", msoFalse
-
-    On Error GoTo 0
-
-    MsgBox "Table reset to plain formatting.", vbInformation, "Reset Table"
-
-End Sub
-```
-
-### `GetSelectedTable`
-
-```vbnet
-Private Function GetSelectedTable() As Table
-    ' Returns the table from the current selection, or Nothing.
-
-    Dim shp As Shape
-    Set shp = GetSelectedTableShape()
-    If Not shp Is Nothing Then
-        Set GetSelectedTable = shp.Table
-    End If
-
-End Function
-```
-
-### `GetSelectedTableShape`
-
-```vbnet
-Private Function GetSelectedTableShape() As Shape
-    ' Returns the Shape containing a table from the current selection.
-
-    Dim sel As Selection
-    Dim shp As Shape
-
-    Set GetSelectedTableShape = Nothing
-    Set sel = ActiveWindow.Selection
-
-    On Error Resume Next
-
-    If sel.Type = ppSelectionShapes Or sel.Type = ppSelectionText Then
-        Set shp = sel.ShapeRange(1)
-        If Not shp Is Nothing Then
-            If shp.HasTable Then
-                Set GetSelectedTableShape = shp
-            End If
-        End If
-    End If
-
-    On Error GoTo 0
-
-End Function
-```
-
-### `CmToPt`
-
-```vbnet
-Private Function CmToPt(cm As Double) As Double
-    CmToPt = cm * 28.3464567
-End Function
-```
-
-### `DeckTableMargin`
-
-```vbnet
-Sub DeckTableMargin()
-
-    Const PAD_TOP As Double = 0.1       ' cm
-    Const PAD_BOTTOM As Double = 0.1    ' cm
-    Const PAD_LEFT As Double = 0.19     ' cm
-    Const PAD_RIGHT As Double = 0.19    ' cm
-
-    Dim sld As Slide
-    Dim shp As Shape
-
-    For Each sld In ActivePresentation.Slides
-        For Each shp In sld.Shapes
-            If shp.HasTable Then
-                SetTableMargins shp.Table, PAD_TOP, PAD_BOTTOM, PAD_LEFT, PAD_RIGHT
-            End If
-        Next shp
-    Next sld
-
-End Sub
-```
-
-### `SelTableMargin`
-
-```vbnet
-Sub SelTableMargin()
-
-    Const PAD_TOP As Double = 0.05      ' cm
-    Const PAD_BOTTOM As Double = 0.05   ' cm
-    Const PAD_LEFT As Double = 0.19     ' cm
-    Const PAD_RIGHT As Double = 0.19    ' cm
-
-    Dim tbl As Table
-    Set tbl = GetSelectedTable()
-
-    If tbl Is Nothing Then
-        MsgBox "Please select a table or place your cursor inside one.", vbExclamation, "Table Margin"
-        Exit Sub
-    End If
-
-    SetTableMargins tbl, PAD_TOP, PAD_BOTTOM, PAD_LEFT, PAD_RIGHT
-    MsgBox "Table margins applied.", vbInformation, "Table Margin"
-
-End Sub
-```
-
-### `SetTableMargins`
-
-```vbnet
-Private Sub SetTableMargins(tbl As Table, topCm As Double, bottomCm As Double, leftCm As Double, rightCm As Double)
-
-    Dim r As Long, c As Long
-
-    On Error Resume Next
-    For r = 1 To tbl.Rows.Count
-        For c = 1 To tbl.Columns.Count
-            With tbl.Cell(r, c).Shape.TextFrame
-                .MarginTop = CmToPt(topCm)
-                .MarginBottom = CmToPt(bottomCm)
-                .MarginLeft = CmToPt(leftCm)
-                .MarginRight = CmToPt(rightCm)
-            End With
-        Next c
-    Next r
-    On Error GoTo 0
+    ' Write result
+    tbl.Cell(targetRow, targetCol).Shape.TextFrame.TextRange.Text = _
+        Format(finalVal, "0.00")
 
 End Sub
 ```
@@ -4110,7 +3488,8 @@ Sub SelTableBorder()
     Set tbl = GetSelectedTable()
 
     If tbl Is Nothing Then
-        MsgBox "Please select a table or place your cursor inside one.", vbExclamation, "Table Border"
+        MsgBox "Please select a table or place your cursor inside one.", _
+               vbExclamation, "Table Border"
         Exit Sub
     End If
 
@@ -4152,20 +3531,375 @@ Sub SelTableBorder()
 End Sub
 ```
 
-## Module `Subs`
-
-### `DeckFontSizeDecrease`
+### `SelTableMargin`
 
 ```vbnet
-Sub DeckFontSizeDecrease()
+Sub SelTableMargin()
+
+    Const PAD_TOP As Double = 0.05
+    Const PAD_BOTTOM As Double = 0.05
+    Const PAD_LEFT As Double = 0.19
+    Const PAD_RIGHT As Double = 0.19
+
+    Dim tbl As Table
+    Set tbl = GetSelectedTable()
+
+    If tbl Is Nothing Then
+        MsgBox "Please select a table or place your cursor inside one.", _
+               vbExclamation, "Table Margin"
+        Exit Sub
+    End If
+
+    SetTableMargins tbl, PAD_TOP, PAD_BOTTOM, PAD_LEFT, PAD_RIGHT
+    MsgBox "Table margins applied.", vbInformation, "Table Margin"
+
+End Sub
+```
+
+### `DocTableMargin`
+
+```vbnet
+Sub DocTableMargin()
+
+    Const PAD_TOP As Double = 0.1
+    Const PAD_BOTTOM As Double = 0.1
+    Const PAD_LEFT As Double = 0.19
+    Const PAD_RIGHT As Double = 0.19
+
+    Dim sld As Slide
+    Dim shp As Shape
+
+    For Each sld In ActivePresentation.Slides
+        For Each shp In sld.Shapes
+            If shp.HasTable Then
+                SetTableMargins shp.Table, PAD_TOP, PAD_BOTTOM, PAD_LEFT, PAD_RIGHT
+            End If
+        Next shp
+    Next sld
+
+End Sub
+```
+
+### `SetTableMargins`
+
+```vbnet
+Private Sub SetTableMargins(tbl As Table, topCm As Double, bottomCm As Double, _
+                            leftCm As Double, rightCm As Double)
+    Dim r As Long, c As Long
+
+    On Error Resume Next
+    For r = 1 To tbl.Rows.Count
+        For c = 1 To tbl.Columns.Count
+            With tbl.Cell(r, c).Shape.TextFrame
+                .MarginTop = CmToPt(topCm)
+                .MarginBottom = CmToPt(bottomCm)
+                .MarginLeft = CmToPt(leftCm)
+                .MarginRight = CmToPt(rightCm)
+            End With
+        Next c
+    Next r
+    On Error GoTo 0
+
+End Sub
+```
+
+### `SelTableAutofit`
+
+```vbnet
+Sub SelTableAutofit()
+
+    Dim tbl As Table
+    Dim shp As Shape
+
+    Set shp = GetSelectedTableShape()
+    If shp Is Nothing Then
+        MsgBox "Please select a table or place your cursor inside one.", _
+               vbExclamation, "Autofit Table"
+        Exit Sub
+    End If
+    Set tbl = shp.Table
+
+    Dim r As Long, c As Long
+    Dim cellW As Single
+    Dim totalW As Single
+
+    On Error Resume Next
+
+    Const MIN_COL_W As Single = 36
+    Const H_PAD As Single = 14
+
+    Dim colWidths() As Single
+    ReDim colWidths(1 To tbl.Columns.Count)
+
+    For c = 1 To tbl.Columns.Count
+        colWidths(c) = MIN_COL_W
+    Next c
+
+    ' Measure each cell's text extent
+    For r = 1 To tbl.Rows.Count
+        For c = 1 To tbl.Columns.Count
+            Dim tr As TextRange
+            Set tr = tbl.Cell(r, c).Shape.TextFrame.TextRange
+            If Len(tr.Text) > 0 Then
+                Dim avgCharW As Single
+                avgCharW = tr.Font.Size * 0.55
+                cellW = Len(tr.Text) * avgCharW + H_PAD
+                If cellW > colWidths(c) Then colWidths(c) = cellW
+            End If
+        Next c
+    Next r
+
+    ' Scale columns proportionally to fit table shape width
+    totalW = 0
+    For c = 1 To tbl.Columns.Count
+        totalW = totalW + colWidths(c)
+    Next c
+
+    If totalW > 0 Then
+        Dim scale As Single
+        scale = shp.Width / totalW
+        For c = 1 To tbl.Columns.Count
+            tbl.Columns(c).Width = colWidths(c) * scale
+        Next c
+    End If
+
+    ' Minimise row heights
+    For r = 1 To tbl.Rows.Count
+        tbl.Rows(r).Height = 0
+    Next r
+
+    On Error GoTo 0
+
+    MsgBox "Table autofitted.", vbInformation, "Autofit Table"
+
+End Sub
+```
+
+### `SelTableReset`
+
+```vbnet
+Sub SelTableReset()
+
+    Dim tbl As Table
+    Dim shp As Shape
+
+    Set shp = GetSelectedTableShape()
+    If shp Is Nothing Then
+        MsgBox "Please select a table or place your cursor inside one.", _
+               vbExclamation, "Reset Table"
+        Exit Sub
+    End If
+    Set tbl = shp.Table
+
+    Dim r As Long, c As Long
+
+    On Error Resume Next
+
+    For r = 1 To tbl.Rows.Count
+        For c = 1 To tbl.Columns.Count
+
+            Dim cel As Cell
+            Set cel = tbl.Cell(r, c)
+
+            ' Clear cell fill
+            cel.Shape.Fill.Background
+
+            ' Clear borders
+            cel.Borders(ppBorderTop).Visible = msoFalse
+            cel.Borders(ppBorderBottom).Visible = msoFalse
+            cel.Borders(ppBorderLeft).Visible = msoFalse
+            cel.Borders(ppBorderRight).Visible = msoFalse
+
+            ' Reset cell margins to PPT defaults
+            With cel.Shape.TextFrame
+                .MarginTop = CmToPt(0.13)
+                .MarginBottom = CmToPt(0.13)
+                .MarginLeft = CmToPt(0.25)
+                .MarginRight = CmToPt(0.25)
+                .WordWrap = msoTrue
+                .AutoSize = ppAutoSizeNone
+            End With
+
+            ' Reset text formatting
+            Dim cellTR As TextRange
+            Set cellTR = cel.Shape.TextFrame.TextRange
+
+            If Len(cellTR.Text) > 0 Then
+                With cellTR.Font
+                    .Name = "Calibri"
+                    .Size = 11
+                    .Bold = msoFalse
+                    .Italic = msoFalse
+                    .Underline = msoFalse
+                    .Color.RGB = RGB(0, 0, 0)
+                    .Shadow = msoFalse
+                End With
+
+                Dim p As Long
+                For p = 1 To cellTR.Paragraphs.Count
+                    With cellTR.Paragraphs(p).ParagraphFormat
+                        .Alignment = ppAlignLeft
+                        .SpaceBefore = 0
+                        .SpaceAfter = 0
+                        .SpaceWithin = 1
+                        .WordWrap = msoTrue
+                        .IndentLevel = 1
+                        .Bullet.Type = ppBulletNone
+                    End With
+                Next p
+            End If
+
+        Next c
+    Next r
+
+    ' Clear table-level style
+    shp.Table.ApplyStyle "{2D5ABB26-0587-4C30-8999-92F81FD0307C}", msoFalse
+
+    On Error GoTo 0
+
+    MsgBox "Table reset to plain formatting.", vbInformation, "Reset Table"
+
+End Sub
+```
+
+### `GetSelectedTable`
+
+```vbnet
+Private Function GetSelectedTable() As Table
+    Dim shp As Shape
+    Set shp = GetSelectedTableShape()
+    If Not shp Is Nothing Then
+        Set GetSelectedTable = shp.Table
+    End If
+End Function
+```
+
+### `GetSelectedTableShape`
+
+```vbnet
+Private Function GetSelectedTableShape() As Shape
+    Dim sel As Selection
+    Dim shp As Shape
+
+    Set GetSelectedTableShape = Nothing
+    Set sel = ActiveWindow.Selection
+
+    On Error Resume Next
+    If sel.Type = ppSelectionShapes Or sel.Type = ppSelectionText Then
+        Set shp = sel.ShapeRange(1)
+        If Not shp Is Nothing Then
+            If shp.HasTable Then
+                Set GetSelectedTableShape = shp
+            End If
+        End If
+    End If
+    On Error GoTo 0
+End Function
+```
+
+### `GetSelectedTableAndCell`
+
+```vbnet
+Private Function GetSelectedTableAndCell( _
+        ByRef tbl As Table, _
+        ByRef outRow As Long, _
+        ByRef outCol As Long) As Boolean
+
+    Dim shp As Shape
+    Dim sel As Selection
+
+    GetSelectedTableAndCell = False
+    Set sel = ActiveWindow.Selection
+
+    On Error Resume Next
+    If sel.Type = ppSelectionText Then
+        Set shp = sel.ShapeRange(1)
+        If Not shp Is Nothing Then
+            If shp.HasTable Then
+                Set tbl = shp.Table
+                If FindCellByTextRange(tbl, sel.TextRange, outRow, outCol) Then
+                    GetSelectedTableAndCell = True
+                End If
+            End If
+        End If
+    End If
+    On Error GoTo 0
+
+End Function
+```
+
+### `FindCellByTextRange`
+
+```vbnet
+Private Function FindCellByTextRange( _
+        tbl As Table, _
+        selRange As TextRange, _
+        ByRef outRow As Long, _
+        ByRef outCol As Long) As Boolean
+
+    Dim r As Long, c As Long
+    Dim cellTR As TextRange
+
+    FindCellByTextRange = False
+
+    On Error Resume Next
+    For r = 1 To tbl.Rows.Count
+        For c = 1 To tbl.Columns.Count
+            Set cellTR = tbl.Cell(r, c).Shape.TextFrame.TextRange
+            If selRange.Parent.Parent.Name = cellTR.Parent.Parent.Name Then
+                outRow = r
+                outCol = c
+                FindCellByTextRange = True
+                Exit Function
+            End If
+        Next c
+    Next r
+    On Error GoTo 0
+
+End Function
+```
+
+### `CleanNumericText`
+
+```vbnet
+Private Function CleanNumericText(s As String) As String
+    Dim t As String
+    t = Trim$(s)
+    t = Replace(t, ",", "")
+    t = Replace(t, "$", "")
+    t = Replace(t, vbTab, "")
+    t = Replace(t, vbCr, "")
+    t = Replace(t, vbLf, "")
+    If InStr(t, "(") > 0 And InStr(t, ")") > 0 Then
+        t = Replace(t, "(", "-")
+        t = Replace(t, ")", "")
+    End If
+    CleanNumericText = Trim$(t)
+End Function
+```
+
+### `CmToPt`
+
+```vbnet
+Private Function CmToPt(cm As Double) As Double
+    CmToPt = cm * 28.3464567
+End Function
+```
+
+## Module `Subs`
+
+### `DocFontSizeDecrease`
+
+```vbnet
+Sub DocFontSizeDecrease()
     ChangeFontSizeAll -1
 End Sub
 ```
 
-### `DeckFontSizeIncrease`
+### `DocFontSizeIncrease`
 
 ```vbnet
-Sub DeckFontSizeIncrease()
+Sub DocFontSizeIncrease()
     ChangeFontSizeAll 1
 End Sub
 ```
@@ -4181,8 +3915,8 @@ Private Sub ChangeFontSizeAll(delta As Single)
 
     For Each sld In ActivePresentation.Slides
         slideNum = slideNum + 1
-        Application.StatusBar = "Resizing fonts — slide " & slideNum & " of " & ActivePresentation.Slides.Count & "..."
-
+        Application.StatusBar = "Resizing fonts — slide " & slideNum & _
+                                " of " & ActivePresentation.Slides.Count & "..."
         For Each shp In sld.Shapes
             ChangeFontSizeInShape shp, delta
         Next shp
@@ -4226,14 +3960,14 @@ Private Sub ChangeFontSizeInShape(shp As Shape, delta As Single)
         Dim r As Long, c As Long
         For r = 1 To shp.Table.Rows.Count
             For c = 1 To shp.Table.Columns.Count
-                ChangeFontSizeInTextFrame shp.Table.Cell(r, c).Shape.TextFrame, delta
+                ChangeFontSizeInTF shp.Table.Cell(r, c).Shape.TextFrame, delta
             Next c
         Next r
         Exit Sub
     End If
 
     If shp.HasTextFrame Then
-        ChangeFontSizeInTextFrame shp.TextFrame, delta
+        ChangeFontSizeInTF shp.TextFrame, delta
     End If
 
     On Error GoTo 0
@@ -4241,15 +3975,14 @@ Private Sub ChangeFontSizeInShape(shp As Shape, delta As Single)
 End Sub
 ```
 
-### `ChangeFontSizeInTextFrame`
+### `ChangeFontSizeInTF`
 
 ```vbnet
-Private Sub ChangeFontSizeInTextFrame(tf As TextFrame, delta As Single)
+Private Sub ChangeFontSizeInTF(tf As TextFrame, delta As Single)
 
     On Error Resume Next
     If Not tf.HasText Then Exit Sub
 
-    ' Change per-run so mixed sizes are preserved
     Dim i As Long
     For i = 1 To tf.TextRange.Runs.Count
         Dim sz As Single
@@ -4264,10 +3997,10 @@ Private Sub ChangeFontSizeInTextFrame(tf As TextFrame, delta As Single)
 End Sub
 ```
 
-### `DeckSpacingSingle`
+### `DocSpacingSingle`
 
 ```vbnet
-Sub DeckSpacingSingle()
+Sub DocSpacingSingle()
 
     Dim sld As Slide
     Dim shp As Shape
@@ -4278,7 +4011,6 @@ Sub DeckSpacingSingle()
         Next shp
     Next sld
 
-    ' Masters & layouts
     Dim dsgn As Design
     For Each dsgn In ActivePresentation.Designs
         For Each shp In dsgn.SlideMaster.Shapes
@@ -4341,7 +4073,7 @@ Private Sub SetSpacingSingleTF(tf As TextFrame)
         With tf.TextRange.Paragraphs(i).ParagraphFormat
             .SpaceBefore = 0
             .SpaceAfter = 0
-            .SpaceWithin = 1  ' single line spacing
+            .SpaceWithin = 1
         End With
     Next i
 
@@ -4349,11 +4081,156 @@ Private Sub SetSpacingSingleTF(tf As TextFrame)
 End Sub
 ```
 
-### `SelFormatNumDecimal`
+### `RunPresetFontArial`
 
 ```vbnet
-Public Sub SelFormatNumDecimal()
-    FormatSelectedNumbers "#,##0.00", ""
+Public Sub RunPresetFontArial()
+    SavePref "LastFont", "Arial"
+    ApplyFontToPresentation "Arial"
+End Sub
+```
+
+### `RunPresetFontEY`
+
+```vbnet
+Public Sub RunPresetFontEY()
+    SavePref "LastFont", "EYInterstate Light"
+    ApplyFontToPresentation "EYInterstate Light"
+End Sub
+```
+
+### `RunPresetFontTimes`
+
+```vbnet
+Public Sub RunPresetFontTimes()
+    SavePref "LastFont", "Times New Roman"
+    ApplyFontToPresentation "Times New Roman"
+End Sub
+```
+
+### `RunPresetFontCalibri`
+
+```vbnet
+Public Sub RunPresetFontCalibri()
+    SavePref "LastFont", "Calibri"
+    ApplyFontToPresentation "Calibri"
+End Sub
+```
+
+### `RunPresetFontRepeat`
+
+```vbnet
+Public Sub RunPresetFontRepeat()
+    ApplyFontToPresentation GetPref("LastFont", "Arial")
+End Sub
+```
+
+### `ApplyFontToPresentation`
+
+```vbnet
+Private Sub ApplyFontToPresentation(f As String)
+
+    Dim sld As Slide
+    Dim shp As Shape
+    Dim slideNum As Long
+
+    For Each sld In ActivePresentation.Slides
+        slideNum = slideNum + 1
+        Application.StatusBar = "Applying font — slide " & slideNum & _
+                                " of " & ActivePresentation.Slides.Count & "..."
+        For Each shp In sld.Shapes
+            ApplyFontToShape shp, f
+        Next shp
+
+        ' Notes page
+        If sld.HasNotesPage Then
+            Dim nshp As Shape
+            For Each nshp In sld.NotesPage.Shapes
+                ApplyFontToShape nshp, f
+            Next nshp
+        End If
+    Next sld
+
+    ' Masters & layouts
+    Dim dsgn As Design
+    For Each dsgn In ActivePresentation.Designs
+        For Each shp In dsgn.SlideMaster.Shapes
+            ApplyFontToShape shp, f
+        Next shp
+        Dim lay As CustomLayout
+        For Each lay In dsgn.SlideMaster.CustomLayouts
+            For Each shp In lay.Shapes
+                ApplyFontToShape shp, f
+            Next shp
+        Next lay
+    Next dsgn
+
+    Application.StatusBar = ""
+    MsgBox "Font applied: " & f, vbInformation, "Font"
+
+End Sub
+```
+
+### `ApplyFontToShape`
+
+```vbnet
+Private Sub ApplyFontToShape(shp As Shape, f As String)
+
+    On Error Resume Next
+
+    If shp.Type = msoGroup Then
+        Dim subShp As Shape
+        For Each subShp In shp.GroupItems
+            ApplyFontToShape subShp, f
+        Next subShp
+        Exit Sub
+    End If
+
+    If shp.HasTable Then
+        Dim r As Long, c As Long
+        For r = 1 To shp.Table.Rows.Count
+            For c = 1 To shp.Table.Columns.Count
+                ApplyFontToTF shp.Table.Cell(r, c).Shape.TextFrame, f
+            Next c
+        Next r
+        Exit Sub
+    End If
+
+    If shp.HasSmartArt Then
+        Dim nd As SmartArtNode
+        For Each nd In shp.SmartArt.AllNodes
+            If Not nd.TextFrame2 Is Nothing Then
+                nd.TextFrame2.TextRange.Font.Name = f
+            End If
+        Next nd
+        Exit Sub
+    End If
+
+    If shp.HasChart Then
+        If shp.Chart.HasTitle Then
+            shp.Chart.ChartTitle.Format.TextFrame2.TextRange.Font.Name = f
+        End If
+        Exit Sub
+    End If
+
+    If shp.HasTextFrame Then
+        ApplyFontToTF shp.TextFrame, f
+    End If
+
+    On Error GoTo 0
+
+End Sub
+```
+
+### `ApplyFontToTF`
+
+```vbnet
+Private Sub ApplyFontToTF(tf As TextFrame, f As String)
+    On Error Resume Next
+    If tf.HasText Then
+        tf.TextRange.Font.Name = f
+    End If
+    On Error GoTo 0
 End Sub
 ```
 
@@ -4361,7 +4238,19 @@ End Sub
 
 ```vbnet
 Public Sub SelFormatNumNoDecimal()
+    SavePref "LastNumFmt", "#,##0"
+    SavePref "LastNumPrefix", ""
     FormatSelectedNumbers "#,##0", ""
+End Sub
+```
+
+### `SelFormatNumDecimal`
+
+```vbnet
+Public Sub SelFormatNumDecimal()
+    SavePref "LastNumFmt", "#,##0.00"
+    SavePref "LastNumPrefix", ""
+    FormatSelectedNumbers "#,##0.00", ""
 End Sub
 ```
 
@@ -4369,7 +4258,19 @@ End Sub
 
 ```vbnet
 Public Sub SelFormatNumDollar()
+    SavePref "LastNumFmt", "#,##0.00"
+    SavePref "LastNumPrefix", "$"
     FormatSelectedNumbers "#,##0.00", "$"
+End Sub
+```
+
+### `SelFormatNumRepeat`
+
+```vbnet
+Public Sub SelFormatNumRepeat()
+    FormatSelectedNumbers _
+        GetPref("LastNumFmt", "#,##0.00"), _
+        GetPref("LastNumPrefix", "")
 End Sub
 ```
 
@@ -4396,7 +4297,8 @@ Private Sub FormatSelectedNumbers(fmt As String, prefix As String)
         Exit Sub
     End If
 
-    MsgBox "Please select text or a shape containing numbers.", vbExclamation, "Number Format"
+    MsgBox "Please select text or a shape containing numbers.", _
+           vbExclamation, "Number Format"
 
 End Sub
 ```
@@ -4420,7 +4322,8 @@ Private Sub FormatNumInShape(shp As Shape, fmt As String, prefix As String)
         Dim r As Long, c As Long
         For r = 1 To shp.Table.Rows.Count
             For c = 1 To shp.Table.Columns.Count
-                FormatNumInTextRange shp.Table.Cell(r, c).Shape.TextFrame.TextRange, fmt, prefix
+                FormatNumInTextRange _
+                    shp.Table.Cell(r, c).Shape.TextFrame.TextRange, fmt, prefix
             Next c
         Next r
         Exit Sub
@@ -4472,27 +4375,11 @@ Private Sub FormatNumInTextRange(tr As TextRange, fmt As String, prefix As Strin
 End Sub
 ```
 
-### `FormatValue`
-
-```vbnet
-Private Function FormatValue(val As Double, fmt As String, prefix As String) As String
-    Dim result As String
-    If val < 0 Then
-        result = "(" & Format(Abs(val), fmt) & ")"
-    Else
-        result = Format(val, fmt)
-    End If
-    If Len(prefix) > 0 Then
-        result = prefix & " " & result
-    End If
-    FormatValue = result
-End Function
-```
-
 ### `SelFormatDateShort`
 
 ```vbnet
 Public Sub SelFormatDateShort()
+    SavePref "LastDateFmt", "DD-MMM-YY"
     FormatSelectedDates "DD-MMM-YY"
 End Sub
 ```
@@ -4501,7 +4388,16 @@ End Sub
 
 ```vbnet
 Public Sub SelFormatDateLong()
+    SavePref "LastDateFmt", "DD-MMMM-YYYY"
     FormatSelectedDates "DD-MMMM-YYYY"
+End Sub
+```
+
+### `SelFormatDateRepeat`
+
+```vbnet
+Public Sub SelFormatDateRepeat()
+    FormatSelectedDates GetPref("LastDateFmt", "DD-MMM-YY")
 End Sub
 ```
 
@@ -4528,7 +4424,8 @@ Private Sub FormatSelectedDates(fmt As String)
         Exit Sub
     End If
 
-    MsgBox "Please select text or a shape containing dates.", vbExclamation, "Date Format"
+    MsgBox "Please select text or a shape containing dates.", _
+           vbExclamation, "Date Format"
 
 End Sub
 ```
@@ -4552,7 +4449,8 @@ Private Sub FormatDateInShape(shp As Shape, fmt As String)
         Dim r As Long, c As Long
         For r = 1 To shp.Table.Rows.Count
             For c = 1 To shp.Table.Columns.Count
-                FormatDateInTextRange shp.Table.Cell(r, c).Shape.TextFrame.TextRange, fmt
+                FormatDateInTextRange _
+                    shp.Table.Cell(r, c).Shape.TextFrame.TextRange, fmt
             Next c
         Next r
         Exit Sub
@@ -4600,6 +4498,23 @@ Private Sub FormatDateInTextRange(tr As TextRange, fmt As String)
 End Sub
 ```
 
+### `FormatValue`
+
+```vbnet
+Private Function FormatValue(val As Double, fmt As String, prefix As String) As String
+    Dim result As String
+    If val < 0 Then
+        result = "(" & Format(Abs(val), fmt) & ")"
+    Else
+        result = Format(val, fmt)
+    End If
+    If Len(prefix) > 0 Then
+        result = prefix & " " & result
+    End If
+    FormatValue = result
+End Function
+```
+
 ### `CleanNumericText`
 
 ```vbnet
@@ -4616,5 +4531,21 @@ Private Function CleanNumericText(s As String) As String
         t = Replace(t, ")", "")
     End If
     CleanNumericText = Trim$(t)
+End Function
+```
+
+### `SavePref`
+
+```vbnet
+Private Sub SavePref(key As String, val As String)
+    SaveSetting "PPTUI", "Preferences", key, val
+End Sub
+```
+
+### `GetPref`
+
+```vbnet
+Private Function GetPref(key As String, defaultVal As String) As String
+    GetPref = GetSetting("PPTUI", "Preferences", key, defaultVal)
 End Function
 ```
