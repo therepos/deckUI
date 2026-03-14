@@ -3,18 +3,15 @@ on:
   push:
     branches: [ main ]
     paths:
-      - src/pptm/deckUI.pptm
-      - src/pptm/deckUI.ppam      
+      - src/ppt/deckUI.pptm
+      - src/ppt/deckUI.ppam      
       - src/cmd/deckUIsetup.cmd
-  workflow_dispatch:
 jobs:
   release:
     runs-on: windows-latest
     permissions: { contents: write }
-    env:
-      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v4
         with: { fetch-depth: 0 }
       - id: tag
         uses: mathieudutour/github-tag-action@v6.2
@@ -26,7 +23,7 @@ jobs:
       - run: >
           New-Item -ItemType Directory -Force -Path src\rel | Out-Null;
           Compress-Archive -Path
-          src\pptm\deckUI.ppam,src\cmd\deckUIsetup.cmd
+          src\cmd\deckUI.ppam,src\cmd\deckUIsetup.cmd
           -DestinationPath src\rel\deckUI.zip -Force
       - uses: softprops/action-gh-release@v2
         with:
