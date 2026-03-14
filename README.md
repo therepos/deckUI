@@ -2,6 +2,7 @@
 
 1. Download the latest [release](https://github.com/therepos/deckUI/releases/deckUI/latest/download/deckUI.zip). 
 2. Install with deckUIsetup.cmd
+3. The addin will be located at `%APPDATA%\Microsoft\AddIns`.
 
 ## Structure
 
