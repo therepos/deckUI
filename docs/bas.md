@@ -3650,9 +3650,13 @@ Sub SelTableAutofit()
 
     If totalW > 0 Then
         Dim scale As Single
+        Dim newW As Single
         scale = shp.Width / totalW
         For c = 1 To tbl.Columns.Count
-            tbl.Columns(c).Width = colWidths(c) * scale
+            newW = colWidths(c) * scale
+            For r = 1 To tbl.Rows.Count
+                tbl.Cell(r, c).Shape.Width = newW
+            Next r
         Next c
     End If
 
@@ -3736,9 +3740,9 @@ Sub SelTableReset()
                         .SpaceAfter = 0
                         .SpaceWithin = 1
                         .WordWrap = msoTrue
-                        .IndentLevel = 1
                         .Bullet.Type = ppBulletNone
                     End With
+                    cellTR.Paragraphs(p).IndentLevel = 1
                 Next p
             End If
 
