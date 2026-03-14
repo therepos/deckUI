@@ -4,14 +4,6 @@ Option Explicit
 ' MODULE: SubTable — PowerPoint Edition
 ' Purpose: Table-specific operations (formulas, borders, margins, autofit, reset)
 '          Requires a table to be selected.
-'
-' Contents:
-'   - SelSumColumn / SelAverageColumn / SelCountColumn
-'   - SelTableBorder
-'   - SelTableMargin
-'   - DocTableMargin
-'   - SelTableAutofit
-'   - SelTableReset
 ' =============================================================================
 
 
@@ -217,17 +209,17 @@ Public Sub SelTableAutofit()
     Const MIN_COL_W As Single = 36
     Const H_PAD As Single = 14
 
-    Dim shp As Shape
     Dim tbl As Table
-    Dim tr As TextRange
-    Dim colWidths() As Single
-    Dim avgCharW As Single
-    Dim cellW As Single
-    Dim totalW As Single
-    Dim scale As Single
-    Dim newW As Single
+    Dim shp As Shape
     Dim r As Long
     Dim c As Long
+    Dim cellW As Single
+    Dim totalW As Single
+    Dim widthScale As Single
+    Dim newW As Single
+    Dim avgCharW As Single
+    Dim tr As TextRange
+    Dim colWidths() As Single
 
     Set shp = GetSelectedTableShape()
     If shp Is Nothing Then
@@ -245,19 +237,14 @@ Public Sub SelTableAutofit()
 
     On Error Resume Next
 
-    ' Estimate required width for each column based on cell text
     For r = 1 To tbl.Rows.Count
         For c = 1 To tbl.Columns.Count
             Set tr = tbl.Cell(r, c).Shape.TextFrame.TextRange
-
-            If Not tr Is Nothing Then
-                If Len(tr.Text) > 0 Then
-                    avgCharW = tr.Font.Size * 0.55
-                    cellW = (Len(tr.Text) * avgCharW) + H_PAD
-
-                    If cellW > colWidths(c) Then
-                        colWidths(c) = cellW
-                    End If
+            If Len(tr.Text) > 0 Then
+                avgCharW = tr.Font.Size * 0.55
+                cellW = (Len(tr.Text) * avgCharW) + H_PAD
+                If cellW > colWidths(c) Then
+                    colWidths(c) = cellW
                 End If
             End If
         Next c
@@ -269,15 +256,14 @@ Public Sub SelTableAutofit()
     Next c
 
     If totalW > 0 Then
-        scale = shp.Width / totalW
+        widthScale = shp.Width / totalW
 
         For c = 1 To tbl.Columns.Count
-            newW = colWidths(c) * scale
+            newW = colWidths(c) * widthScale
             tbl.Columns(c).Width = newW
         Next c
     End If
 
-    ' Minimise row heights
     For r = 1 To tbl.Rows.Count
         tbl.Rows(r).Height = 0
     Next r
@@ -316,16 +302,13 @@ Public Sub SelTableReset()
 
             Set cel = tbl.Cell(r, c)
 
-            ' Clear cell fill
             cel.Shape.Fill.Visible = msoFalse
 
-            ' Clear borders
             cel.Borders(ppBorderTop).Visible = msoFalse
             cel.Borders(ppBorderBottom).Visible = msoFalse
             cel.Borders(ppBorderLeft).Visible = msoFalse
             cel.Borders(ppBorderRight).Visible = msoFalse
 
-            ' Reset cell margins
             With cel.Shape.TextFrame
                 .MarginTop = CmToPt(0.13)
                 .MarginBottom = CmToPt(0.13)
