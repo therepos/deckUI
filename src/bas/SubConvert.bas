@@ -22,12 +22,8 @@ Public Sub ConvertUStoUK()
 
     Dim sld As Slide
     Dim shp As Shape
-    Dim slideNum As Long
 
     For Each sld In ActivePresentation.Slides
-        slideNum = slideNum + 1
-        Application.StatusBar = "Converting slide " & slideNum & " of " & ActivePresentation.Slides.Count & "..."
-
         For Each shp In sld.Shapes
             ProcessShape shp
         Next shp
@@ -49,9 +45,7 @@ Public Sub ConvertUStoUK()
     Next dsgn
 
     ' Notes pages
-    slideNum = 0
     For Each sld In ActivePresentation.Slides
-        slideNum = slideNum + 1
         If sld.HasNotesPage Then
             Dim nshp As Shape
             For Each nshp In sld.NotesPage.Shapes
@@ -64,7 +58,6 @@ Public Sub ConvertUStoUK()
         End If
     Next sld
 
-    Application.StatusBar = ""
     Set m_dict = Nothing
 
     If m_totalReplaced > 0 Then
