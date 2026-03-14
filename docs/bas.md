@@ -3416,7 +3416,7 @@ End Sub
 ### `InsertTableFormula`
 
 ```vbnet
-Private Sub InsertTableFormula(funcName As String)
+Private Sub InsertTableFormula(ByVal funcName As String)
 
     Dim tbl As Table
     Dim targetRow As Long
@@ -3429,19 +3429,16 @@ Private Sub InsertTableFormula(funcName As String)
     Dim finalVal As Double
 
     If Not GetSelectedTableAndCell(tbl, targetRow, targetCol) Then
-        MsgBox "Please place your cursor in a table cell.", _
-               vbExclamation, "Table Formula"
+        MsgBox "Please place your cursor in a table cell.", vbExclamation, "Table Formula"
         Exit Sub
     End If
 
-    ' Read numeric values from cells above
     total = 0
     cnt = 0
 
     For r = 1 To targetRow - 1
         On Error Resume Next
-        cellText = CleanNumericText( _
-            tbl.Cell(r, targetCol).Shape.TextFrame.TextRange.Text)
+        cellText = CleanNumericText(tbl.Cell(r, targetCol).Shape.TextFrame.TextRange.Text)
         On Error GoTo 0
 
         If IsNumeric(cellText) And Len(cellText) > 0 Then
@@ -3451,8 +3448,7 @@ Private Sub InsertTableFormula(funcName As String)
         End If
     Next r
 
-    ' Calculate
-    Select Case UCase(funcName)
+    Select Case UCase$(funcName)
         Case "SUM"
             finalVal = total
         Case "AVERAGE"
@@ -3463,11 +3459,11 @@ Private Sub InsertTableFormula(funcName As String)
             End If
         Case "COUNT"
             finalVal = cnt
+        Case Else
+            finalVal = 0
     End Select
 
-    ' Write result
-    tbl.Cell(targetRow, targetCol).Shape.TextFrame.TextRange.Text = _
-        Format(finalVal, "0.00")
+    tbl.Cell(targetRow, targetCol).Shape.TextFrame.TextRange.Text = Format$(finalVal, "0.00")
 
 End Sub
 ```
@@ -3475,48 +3471,55 @@ End Sub
 ### `SelTableBorder`
 
 ```vbnet
-Sub SelTableBorder()
+Public Sub SelTableBorder()
 
     Dim tbl As Table
+    Dim r As Long
+    Dim c As Long
+
     Set tbl = GetSelectedTable()
 
     If tbl Is Nothing Then
-        MsgBox "Please select a table or place your cursor inside one.", _
-               vbExclamation, "Table Border"
+        MsgBox "Please select a table or place your cursor inside one.", vbExclamation, "Table Border"
         Exit Sub
     End If
 
-    Dim r As Long, c As Long
-
     On Error Resume Next
+
     For r = 1 To tbl.Rows.Count
         For c = 1 To tbl.Columns.Count
+
             With tbl.Cell(r, c).Borders(ppBorderTop)
                 .ForeColor.RGB = RGB(0, 0, 0)
                 .Weight = 0.25
                 .DashStyle = msoLineSolid
                 .Visible = msoTrue
             End With
+
             With tbl.Cell(r, c).Borders(ppBorderBottom)
                 .ForeColor.RGB = RGB(0, 0, 0)
                 .Weight = 0.25
                 .DashStyle = msoLineSolid
                 .Visible = msoTrue
             End With
+
             With tbl.Cell(r, c).Borders(ppBorderLeft)
                 .ForeColor.RGB = RGB(0, 0, 0)
                 .Weight = 0.25
                 .DashStyle = msoLineSolid
                 .Visible = msoTrue
             End With
+
             With tbl.Cell(r, c).Borders(ppBorderRight)
                 .ForeColor.RGB = RGB(0, 0, 0)
                 .Weight = 0.25
                 .DashStyle = msoLineSolid
                 .Visible = msoTrue
             End With
+
         Next c
     Next r
+
     On Error GoTo 0
 
     MsgBox "Borders applied.", vbInformation, "Table Border"
@@ -3527,7 +3530,7 @@ End Sub
 ### `SelTableMargin`
 
 ```vbnet
-Sub SelTableMargin()
+Public Sub SelTableMargin()
 
     Const PAD_TOP As Double = 0.05
     Const PAD_BOTTOM As Double = 0.05
@@ -3535,11 +3538,11 @@ Sub SelTableMargin()
     Const PAD_RIGHT As Double = 0.19
 
     Dim tbl As Table
+
     Set tbl = GetSelectedTable()
 
     If tbl Is Nothing Then
-        MsgBox "Please select a table or place your cursor inside one.", _
-               vbExclamation, "Table Margin"
+        MsgBox "Please select a table or place your cursor inside one.", vbExclamation, "Table Margin"
         Exit Sub
     End If
 
@@ -3552,7 +3555,7 @@ End Sub
 ### `DocTableMargin`
 
 ```vbnet
-Sub DocTableMargin()
+Public Sub DocTableMargin()
 
     Const PAD_TOP As Double = 0.1
     Const PAD_BOTTOM As Double = 0.1
@@ -3564,9 +3567,11 @@ Sub DocTableMargin()
 
     For Each sld In ActivePresentation.Slides
         For Each shp In sld.Shapes
+            On Error Resume Next
             If shp.HasTable Then
                 SetTableMargins shp.Table, PAD_TOP, PAD_BOTTOM, PAD_LEFT, PAD_RIGHT
             End If
+            On Error GoTo 0
         Next shp
     Next sld
 
@@ -3576,11 +3581,13 @@ End Sub
 ### `SetTableMargins`
 
 ```vbnet
-Private Sub SetTableMargins(tbl As Table, topCm As Double, bottomCm As Double, _
-                            leftCm As Double, rightCm As Double)
-    Dim r As Long, c As Long
+Private Sub SetTableMargins(ByVal tbl As Table, ByVal topCm As Double, ByVal bottomCm As Double, ByVal leftCm As Double, ByVal rightCm As Double)
+
+    Dim r As Long
+    Dim c As Long
 
     On Error Resume Next
+
     For r = 1 To tbl.Rows.Count
         For c = 1 To tbl.Columns.Count
             With tbl.Cell(r, c).Shape.TextFrame
@@ -3591,6 +3598,7 @@ Private Sub SetTableMargins(tbl As Table, topCm As Double, bottomCm As Double, _
             End With
         Next c
     Next r
+
     On Error GoTo 0
 
 End Sub
@@ -3599,64 +3607,68 @@ End Sub
 ### `SelTableAutofit`
 
 ```vbnet
-Sub SelTableAutofit()
-
-    Dim tbl As Table
-    Dim shp As Shape
-
-    Set shp = GetSelectedTableShape()
-    If shp Is Nothing Then
-        MsgBox "Please select a table or place your cursor inside one.", _
-               vbExclamation, "Autofit Table"
-        Exit Sub
-    End If
-    Set tbl = shp.Table
-
-    Dim r As Long, c As Long
-    Dim cellW As Single
-    Dim totalW As Single
-
-    On Error Resume Next
+Public Sub SelTableAutofit()
 
     Const MIN_COL_W As Single = 36
     Const H_PAD As Single = 14
 
+    Dim shp As Shape
+    Dim tbl As Table
+    Dim tr As TextRange
     Dim colWidths() As Single
+    Dim avgCharW As Single
+    Dim cellW As Single
+    Dim totalW As Single
+    Dim scale As Single
+    Dim newW As Single
+    Dim r As Long
+    Dim c As Long
+
+    Set shp = GetSelectedTableShape()
+    If shp Is Nothing Then
+        MsgBox "Please select a table or place your cursor inside one.", vbExclamation, "Autofit Table"
+        Exit Sub
+    End If
+
+    Set tbl = shp.Table
+
     ReDim colWidths(1 To tbl.Columns.Count)
 
     For c = 1 To tbl.Columns.Count
         colWidths(c) = MIN_COL_W
     Next c
 
-    ' Measure each cell's text extent
+    On Error Resume Next
+
+    ' Estimate required width for each column based on cell text
     For r = 1 To tbl.Rows.Count
         For c = 1 To tbl.Columns.Count
-            Dim tr As TextRange
             Set tr = tbl.Cell(r, c).Shape.TextFrame.TextRange
-            If Len(tr.Text) > 0 Then
-                Dim avgCharW As Single
-                avgCharW = tr.Font.Size * 0.55
-                cellW = Len(tr.Text) * avgCharW + H_PAD
-                If cellW > colWidths(c) Then colWidths(c) = cellW
+
+            If Not tr Is Nothing Then
+                If Len(tr.Text) > 0 Then
+                    avgCharW = tr.Font.Size * 0.55
+                    cellW = (Len(tr.Text) * avgCharW) + H_PAD
+
+                    If cellW > colWidths(c) Then
+                        colWidths(c) = cellW
+                    End If
+                End If
             End If
         Next c
     Next r
 
-    ' Scale columns proportionally to fit table shape width
     totalW = 0
     For c = 1 To tbl.Columns.Count
         totalW = totalW + colWidths(c)
     Next c
 
     If totalW > 0 Then
-        Dim scale As Single
-        Dim newW As Single
         scale = shp.Width / totalW
+
         For c = 1 To tbl.Columns.Count
             newW = colWidths(c) * scale
-            For r = 1 To tbl.Rows.Count
-                tbl.Cell(r, c).Shape.Width = newW
-            Next r
+            tbl.Columns(c).Width = newW
         Next c
     End If
 
@@ -3675,31 +3687,33 @@ End Sub
 ### `SelTableReset`
 
 ```vbnet
-Sub SelTableReset()
+Public Sub SelTableReset()
 
-    Dim tbl As Table
     Dim shp As Shape
+    Dim tbl As Table
+    Dim cel As Cell
+    Dim cellTR As TextRange
+    Dim r As Long
+    Dim c As Long
+    Dim p As Long
 
     Set shp = GetSelectedTableShape()
     If shp Is Nothing Then
-        MsgBox "Please select a table or place your cursor inside one.", _
-               vbExclamation, "Reset Table"
+        MsgBox "Please select a table or place your cursor inside one.", vbExclamation, "Reset Table"
         Exit Sub
     End If
-    Set tbl = shp.Table
 
-    Dim r As Long, c As Long
+    Set tbl = shp.Table
 
     On Error Resume Next
 
     For r = 1 To tbl.Rows.Count
         For c = 1 To tbl.Columns.Count
 
-            Dim cel As Cell
             Set cel = tbl.Cell(r, c)
 
             ' Clear cell fill
-            cel.Shape.Fill.Background
+            cel.Shape.Fill.Visible = msoFalse
 
             ' Clear borders
             cel.Borders(ppBorderTop).Visible = msoFalse
@@ -3707,7 +3721,7 @@ Sub SelTableReset()
             cel.Borders(ppBorderLeft).Visible = msoFalse
             cel.Borders(ppBorderRight).Visible = msoFalse
 
-            ' Reset cell margins to PPT defaults
+            ' Reset cell margins
             With cel.Shape.TextFrame
                 .MarginTop = CmToPt(0.13)
                 .MarginBottom = CmToPt(0.13)
@@ -3717,8 +3731,6 @@ Sub SelTableReset()
                 .AutoSize = ppAutoSizeNone
             End With
 
-            ' Reset text formatting
-            Dim cellTR As TextRange
             Set cellTR = cel.Shape.TextFrame.TextRange
 
             If Len(cellTR.Text) > 0 Then
@@ -3732,14 +3744,12 @@ Sub SelTableReset()
                     .Shadow = msoFalse
                 End With
 
-                Dim p As Long
                 For p = 1 To cellTR.Paragraphs.Count
                     With cellTR.Paragraphs(p).ParagraphFormat
                         .Alignment = ppAlignLeft
                         .SpaceBefore = 0
                         .SpaceAfter = 0
                         .SpaceWithin = 1
-                        .WordWrap = msoTrue
                         .Bullet.Type = ppBulletNone
                     End With
                     cellTR.Paragraphs(p).IndentLevel = 1
@@ -3748,9 +3758,6 @@ Sub SelTableReset()
 
         Next c
     Next r
-
-    ' Clear table-level style
-    shp.Table.ApplyStyle "{2D5ABB26-0587-4C30-8999-92F81FD0307C}", msoFalse
 
     On Error GoTo 0
 
@@ -3763,11 +3770,16 @@ End Sub
 
 ```vbnet
 Private Function GetSelectedTable() As Table
+
     Dim shp As Shape
+
     Set shp = GetSelectedTableShape()
     If Not shp Is Nothing Then
         Set GetSelectedTable = shp.Table
+    Else
+        Set GetSelectedTable = Nothing
     End If
+
 End Function
 ```
 
@@ -3775,6 +3787,7 @@ End Function
 
 ```vbnet
 Private Function GetSelectedTableShape() As Shape
+
     Dim sel As Selection
     Dim shp As Shape
 
@@ -3782,6 +3795,7 @@ Private Function GetSelectedTableShape() As Shape
     Set sel = ActiveWindow.Selection
 
     On Error Resume Next
+
     If sel.Type = ppSelectionShapes Or sel.Type = ppSelectionText Then
         Set shp = sel.ShapeRange(1)
         If Not shp Is Nothing Then
@@ -3790,17 +3804,16 @@ Private Function GetSelectedTableShape() As Shape
             End If
         End If
     End If
+
     On Error GoTo 0
+
 End Function
 ```
 
 ### `GetSelectedTableAndCell`
 
 ```vbnet
-Private Function GetSelectedTableAndCell( _
-        ByRef tbl As Table, _
-        ByRef outRow As Long, _
-        ByRef outCol As Long) As Boolean
+Private Function GetSelectedTableAndCell(ByRef tbl As Table, ByRef outRow As Long, ByRef outCol As Long) As Boolean
 
     Dim shp As Shape
     Dim sel As Selection
@@ -3809,6 +3822,7 @@ Private Function GetSelectedTableAndCell( _
     Set sel = ActiveWindow.Selection
 
     On Error Resume Next
+
     If sel.Type = ppSelectionText Then
         Set shp = sel.ShapeRange(1)
         If Not shp Is Nothing Then
@@ -3820,6 +3834,7 @@ Private Function GetSelectedTableAndCell( _
             End If
         End If
     End If
+
     On Error GoTo 0
 
 End Function
@@ -3828,18 +3843,16 @@ End Function
 ### `FindCellByTextRange`
 
 ```vbnet
-Private Function FindCellByTextRange( _
-        tbl As Table, _
-        selRange As TextRange, _
-        ByRef outRow As Long, _
-        ByRef outCol As Long) As Boolean
+Private Function FindCellByTextRange(ByVal tbl As Table, ByVal selRange As TextRange, ByRef outRow As Long, ByRef outCol As Long) As Boolean
 
-    Dim r As Long, c As Long
+    Dim r As Long
+    Dim c As Long
     Dim cellTR As TextRange
 
     FindCellByTextRange = False
 
     On Error Resume Next
+
     For r = 1 To tbl.Rows.Count
         For c = 1 To tbl.Columns.Count
             Set cellTR = tbl.Cell(r, c).Shape.TextFrame.TextRange
@@ -3851,6 +3864,7 @@ Private Function FindCellByTextRange( _
             End If
         Next c
     Next r
+
     On Error GoTo 0
 
 End Function
@@ -3859,26 +3873,31 @@ End Function
 ### `CleanNumericText`
 
 ```vbnet
-Private Function CleanNumericText(s As String) As String
+Private Function CleanNumericText(ByVal s As String) As String
+
     Dim t As String
+
     t = Trim$(s)
     t = Replace(t, ",", "")
     t = Replace(t, "$", "")
     t = Replace(t, vbTab, "")
     t = Replace(t, vbCr, "")
     t = Replace(t, vbLf, "")
+
     If InStr(t, "(") > 0 And InStr(t, ")") > 0 Then
         t = Replace(t, "(", "-")
         t = Replace(t, ")", "")
     End If
+
     CleanNumericText = Trim$(t)
+
 End Function
 ```
 
 ### `CmToPt`
 
 ```vbnet
-Private Function CmToPt(cm As Double) As Double
+Private Function CmToPt(ByVal cm As Double) As Double
     CmToPt = cm * 28.3464567
 End Function
 ```
