@@ -1,4 +1,3 @@
-Attribute VB_Name = "Images"
 Option Explicit
 ' ===== BASE64 DATA =====
 ' Run ConvertImageToBase64 once per image to generate these strings

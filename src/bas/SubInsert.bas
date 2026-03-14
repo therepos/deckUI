@@ -1,4 +1,3 @@
-Attribute VB_Name = "SubInsert"
 Option Explicit
 
 ' ============================================================
