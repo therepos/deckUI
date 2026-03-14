@@ -2834,6 +2834,14 @@ End Sub
 
 ## Module `SubInsert`
 
+### `CmToPt`
+
+```vbnet
+Private Function CmToPt(cm As Double) As Double
+    CmToPt = cm * 28.3464567
+End Function
+```
+
 ### `InsertLogoEYWhite`
 
 ```vbnet
@@ -2940,7 +2948,7 @@ Private Sub InsertBase64Img(base64String As String, Optional widthCm As Double =
     If widthCm > 0 Then
         ratio = pic.Height / pic.Width
         pic.LockAspectRatio = msoTrue
-        pic.Width = Application.CentimetersToPoints(widthCm)
+        pic.Width = CmToPt(widthCm)
         pic.Height = pic.Width * ratio
     End If
 
@@ -3022,6 +3030,14 @@ End Sub
 ```
 
 ## Module `SubReset`
+
+### `CmToPt`
+
+```vbnet
+Private Function CmToPt(cm As Double) As Double
+    CmToPt = cm * 28.3464567
+End Function
+```
 
 ### `ResetAll`
 
@@ -3156,10 +3172,10 @@ Private Sub ResetTables()
                     For c = 1 To tbl.Columns.Count
                         Set cel = tbl.Cell(r, c)
                         With cel.Shape.TextFrame2
-                            .MarginTop = Application.CentimetersToPoints(0.05)
-                            .MarginBottom = Application.CentimetersToPoints(0.05)
-                            .MarginLeft = Application.CentimetersToPoints(0.19)
-                            .MarginRight = Application.CentimetersToPoints(0.19)
+                            .MarginTop = CmToPt(0.05)
+                            .MarginBottom = CmToPt(0.05)
+                            .MarginLeft = CmToPt(0.19)
+                            .MarginRight = CmToPt(0.19)
                         End With
                         ' Borders
                         Dim bdr As Long
@@ -3227,6 +3243,14 @@ End Sub
 ```
 
 ## Module `SubTable`
+
+### `CmToPt`
+
+```vbnet
+Private Function CmToPt(cm As Double) As Double
+    CmToPt = cm * 28.3464567
+End Function
+```
 
 ### `SelSumColumn`
 
@@ -3456,10 +3480,10 @@ Sub SelTableMargin()
     For r = 1 To tbl.Rows.Count
         For c = 1 To tbl.Columns.Count
             With tbl.Cell(r, c).Shape.TextFrame2
-                .MarginTop = Application.CentimetersToPoints(PAD_TOP_CM)
-                .MarginBottom = Application.CentimetersToPoints(PAD_BOTTOM_CM)
-                .MarginLeft = Application.CentimetersToPoints(PAD_LEFT_CM)
-                .MarginRight = Application.CentimetersToPoints(PAD_RIGHT_CM)
+                .MarginTop = CmToPt(PAD_TOP_CM)
+                .MarginBottom = CmToPt(PAD_BOTTOM_CM)
+                .MarginLeft = CmToPt(PAD_LEFT_CM)
+                .MarginRight = CmToPt(PAD_RIGHT_CM)
             End With
         Next c
     Next r
@@ -3486,10 +3510,10 @@ Sub DeckTableMargin()
                 For r = 1 To tbl.Rows.Count
                     For c = 1 To tbl.Columns.Count
                         With tbl.Cell(r, c).Shape.TextFrame2
-                            .MarginTop = Application.CentimetersToPoints(0.1)
-                            .MarginBottom = Application.CentimetersToPoints(0.1)
-                            .MarginLeft = Application.CentimetersToPoints(0.19)
-                            .MarginRight = Application.CentimetersToPoints(0.19)
+                            .MarginTop = CmToPt(0.1)
+                            .MarginBottom = CmToPt(0.1)
+                            .MarginLeft = CmToPt(0.19)
+                            .MarginRight = CmToPt(0.19)
                         End With
                     Next c
                 Next r
