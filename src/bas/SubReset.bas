@@ -1,5 +1,10 @@
 Option Explicit
 
+' 1 cm = 28.3464567 points (PPT has no built-in CentimetersToPoints)
+Private Function CmToPt(cm As Double) As Double
+    CmToPt = cm * 28.3464567
+End Function
+
 ' =============================================================================
 ' MODULE: SubReset
 ' Purpose: Reset operations for PowerPoint presentations.
@@ -115,10 +120,10 @@ Private Sub ResetTables()
                     For c = 1 To tbl.Columns.Count
                         Set cel = tbl.Cell(r, c)
                         With cel.Shape.TextFrame2
-                            .MarginTop = Application.CentimetersToPoints(0.05)
-                            .MarginBottom = Application.CentimetersToPoints(0.05)
-                            .MarginLeft = Application.CentimetersToPoints(0.19)
-                            .MarginRight = Application.CentimetersToPoints(0.19)
+                            .MarginTop = CmToPt(0.05)
+                            .MarginBottom = CmToPt(0.05)
+                            .MarginLeft = CmToPt(0.19)
+                            .MarginRight = CmToPt(0.19)
                         End With
                         ' Borders
                         Dim bdr As Long

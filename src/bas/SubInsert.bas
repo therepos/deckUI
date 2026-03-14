@@ -1,5 +1,10 @@
 Option Explicit
 
+' 1 cm = 28.3464567 points (PPT has no built-in CentimetersToPoints)
+Private Function CmToPt(cm As Double) As Double
+    CmToPt = cm * 28.3464567
+End Function
+
 Public Sub InsertLogoEYWhite()
     InsertBase64Img GetLogoEYWhite(), 2.93
 End Sub
@@ -77,7 +82,7 @@ Private Sub InsertBase64Img(base64String As String, Optional widthCm As Double =
     If widthCm > 0 Then
         ratio = pic.Height / pic.Width
         pic.LockAspectRatio = msoTrue
-        pic.Width = Application.CentimetersToPoints(widthCm)
+        pic.Width = CmToPt(widthCm)
         pic.Height = pic.Width * ratio
     End If
 
