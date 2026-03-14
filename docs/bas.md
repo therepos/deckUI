@@ -2627,9 +2627,9 @@ End Sub
 Public Sub RunByName(control As IRibbonControl)
     Dim macro As String
     macro = control.Tag
-    If Len(macro) = 0 Then macro = control.ID
+    If Len(macro) = 0 Then macro = control.Id
     On Error GoTo errh
-    Application.Run macro
+    Application.run macro
     Exit Sub
 errh:
     MsgBox "Macro not found: " & macro, vbExclamation
@@ -2921,7 +2921,7 @@ Private Sub InsertBase64Img(base64String As String, Optional widthCm As Double =
     Set xml = CreateObject("MSXML2.DOMDocument")
     Set node = xml.createElement("b64")
     node.DataType = "bin.base64"
-    node.text = base64String
+    node.Text = base64String
     fileData = node.nodeTypedValue
 
     ' Write to temp file
@@ -3001,7 +3001,7 @@ Public Sub ConvertImageToBase64()
         node.nodeTypedValue = fileData
 
         ' Strip all whitespace
-        base64 = node.text
+        base64 = node.Text
         base64 = Replace(base64, vbCrLf, "")
         base64 = Replace(base64, vbCr, "")
         base64 = Replace(base64, vbLf, "")
@@ -3285,51 +3285,47 @@ Private Sub InsertTableFormula(funcName As String)
     Dim tbl As Table
     Dim targetRow As Long
     Dim targetCol As Long
-    Dim r As Long
+    Dim r As Long, c As Long
     Dim cellText As String
+    Dim rawText As String
     Dim val As Double
     Dim total As Double
     Dim cnt As Long
     Dim finalVal As Double
-
+    Dim origText As String
+    Dim marker As String
+    
+    ' Format detection
+    Dim hasDecimal As Boolean
+    Dim hasComma As Boolean
+    Dim hasDollar As Boolean
+    
     Set sel = ActiveWindow.Selection
-
-    ' We need to find the active table and the cell the user is in.
-    ' PPT doesn't expose the "active cell" directly, so we look for
-    ' a text selection inside a table shape.
 
     If sel.Type <> ppSelectionText Then
         MsgBox "Please click inside a table cell, then run this command.", vbExclamation
         Exit Sub
     End If
 
-    ' Walk up to find the table shape
     Set shp = sel.ShapeRange(1)
 
     If Not shp.HasTable Then
-        ' The parent of the text frame might be a cell shape inside a table
-        ' Try the parent shape
-        On Error GoTo notTable
-        Set shp = shp.ParentGroup
-        On Error GoTo 0
-        If Not shp.HasTable Then GoTo notTable
+        MsgBox "Please place your cursor inside a table cell.", vbExclamation
+        Exit Sub
     End If
 
     Set tbl = shp.Table
 
-    ' Find which cell contains the selection by matching text range
-    Dim tr As TextRange
-    Set tr = sel.TextRange
+    ' Identify the active cell using a temporary marker
+    origText = sel.TextRange.Text
+    marker = Chr(1) & "DECKUI_MARKER" & Chr(2)
+    sel.TextRange.Text = marker
 
-    ' Determine cell position by iterating
     Dim found As Boolean
     found = False
     For r = 1 To tbl.Rows.Count
-        Dim c As Long
         For c = 1 To tbl.Columns.Count
-            If tbl.Cell(r, c).Shape.TextFrame.TextRange.Text = tr.Text Then
-                ' Heuristic: if the text matches, assume it's our cell
-                ' (works well when user clicks into a specific cell)
+            If tbl.Cell(r, c).Shape.TextFrame.TextRange.Text = marker Then
                 targetRow = r
                 targetCol = c
                 found = True
@@ -3340,19 +3336,30 @@ Private Sub InsertTableFormula(funcName As String)
     Next r
 
     If Not found Then
-        ' Fallback: use last row, last column with selection
-        MsgBox "Could not determine the active cell. " & _
-               "Please place your cursor in the target cell.", vbExclamation
+        sel.TextRange.Text = origText
+        MsgBox "Could not determine the active cell.", vbExclamation
         Exit Sub
     End If
 
-    ' Calculate from rows above the target
+    ' Restore original text before calculating
+    tbl.Cell(targetRow, targetCol).Shape.TextFrame.TextRange.Text = origText
+
+    ' Calculate from rows above and detect format
     total = 0
     cnt = 0
+    hasDecimal = False
+    hasComma = False
+    hasDollar = False
 
     For r = 1 To targetRow - 1
-        cellText = Trim$(tbl.Cell(r, targetCol).Shape.TextFrame.TextRange.Text)
-        cellText = CleanNumericText(cellText)
+        rawText = Trim$(tbl.Cell(r, targetCol).Shape.TextFrame.TextRange.Text)
+        
+        ' Detect formatting from raw text before cleaning
+        If InStr(rawText, ".") > 0 Then hasDecimal = True
+        If InStr(rawText, ",") > 0 Then hasComma = True
+        If InStr(rawText, "$") > 0 Then hasDollar = True
+        
+        cellText = CleanNumericText(rawText)
         If IsNumeric(cellText) And Len(cellText) > 0 Then
             val = CDbl(cellText)
             total = total + val
@@ -3374,13 +3381,28 @@ Private Sub InsertTableFormula(funcName As String)
             finalVal = cnt
     End Select
 
-    ' Write result into the target cell
-    tbl.Cell(targetRow, targetCol).Shape.TextFrame.TextRange.Text = Format(finalVal, "0.00")
+    ' Build format string based on detected format
+    Dim fmt As String
+    Dim prefix As String
+    
+    If hasComma And hasDecimal Then
+        fmt = "#,##0.00"
+    ElseIf hasComma Then
+        fmt = "#,##0"
+    ElseIf hasDecimal Then
+        fmt = "0.00"
+    Else
+        fmt = "0"
+    End If
+    
+    If hasDollar Then
+        prefix = "$"
+    Else
+        prefix = ""
+    End If
 
-    Exit Sub
-
-notTable:
-    MsgBox "Please place your cursor inside a table cell.", vbExclamation
+    ' Write formatted result
+    tbl.Cell(targetRow, targetCol).Shape.TextFrame.TextRange.Text = FormatValue(finalVal, fmt, prefix)
 
 End Sub
 ```
@@ -3544,38 +3566,36 @@ Private Function CleanNumericText(s As String) As String
 End Function
 ```
 
+### `FormatValue`
+
+```vbnet
+Private Function FormatValue(val As Double, fmt As String, prefix As String) As String
+    Dim result As String
+    If val < 0 Then
+        result = "(" & Format(Abs(val), fmt) & ")"
+    Else
+        result = Format(val, fmt)
+    End If
+    If Len(prefix) > 0 Then
+        result = prefix & " " & result
+    End If
+    FormatValue = result
+End Function
+```
+
 ## Module `Subs`
 
 ### `DeckFontSizeDecrease`
 
 ```vbnet
 Sub DeckFontSizeDecrease()
-
     Dim sld As Slide
-    Dim shp As Shape
-    Dim tf As TextFrame2
-    Dim rng As TextRange2
-    Dim para As TextRange2
-    Dim r As Long
-
-    On Error Resume Next
     For Each sld In ActivePresentation.Slides
+        Dim shp As Shape
         For Each shp In sld.Shapes
-            If shp.HasTextFrame Then
-                Set tf = shp.TextFrame2
-                If tf.HasText Then
-                    For r = 1 To tf.TextRange.Runs.Count
-                        Set rng = tf.TextRange.Runs(r)
-                        If rng.Font.Size > 1 Then
-                            rng.Font.Size = rng.Font.Size - 1
-                        End If
-                    Next r
-                End If
-            End If
+            AdjustShapeFontSize shp, -1
         Next shp
     Next sld
-    On Error GoTo 0
-
 End Sub
 ```
 
@@ -3583,29 +3603,68 @@ End Sub
 
 ```vbnet
 Sub DeckFontSizeIncrease()
-
     Dim sld As Slide
-    Dim shp As Shape
-    Dim tf As TextFrame2
-    Dim rng As TextRange2
-    Dim r As Long
-
-    On Error Resume Next
     For Each sld In ActivePresentation.Slides
+        Dim shp As Shape
         For Each shp In sld.Shapes
-            If shp.HasTextFrame Then
-                Set tf = shp.TextFrame2
-                If tf.HasText Then
-                    For r = 1 To tf.TextRange.Runs.Count
-                        Set rng = tf.TextRange.Runs(r)
-                        rng.Font.Size = rng.Font.Size + 1
-                    Next r
-                End If
-            End If
+            AdjustShapeFontSize shp, 1
         Next shp
     Next sld
-    On Error GoTo 0
+End Sub
+```
 
+### `AdjustShapeFontSize`
+
+```vbnet
+Private Sub AdjustShapeFontSize(shp As Shape, delta As Long)
+    Dim tr As TextRange
+    Dim run As TextRange
+    Dim i As Long
+
+    On Error Resume Next
+
+    ' --- Group: recurse into each child ---
+    If shp.Type = msoGroup Then
+        Dim child As Shape
+        For Each child In shp.GroupItems
+            AdjustShapeFontSize child, delta
+        Next child
+        Exit Sub
+    End If
+
+    ' --- Table: iterate every cell ---
+    If shp.HasTable Then
+        Dim tbl As Table
+        Dim r As Long, c As Long
+        Set tbl = shp.Table
+        For r = 1 To tbl.Rows.Count
+            For c = 1 To tbl.Columns.Count
+                Set tr = tbl.Cell(r, c).Shape.TextFrame.TextRange
+                For i = 1 To tr.Runs.Count
+                    Set run = tr.Runs(i)
+                    If run.Font.Size + delta >= 1 Then
+                        run.Font.Size = run.Font.Size + delta
+                    End If
+                Next i
+            Next c
+        Next r
+        Exit Sub
+    End If
+
+    ' --- Regular text frame ---
+    If shp.HasTextFrame Then
+        If shp.TextFrame.HasText Then
+            Set tr = shp.TextFrame.TextRange
+            For i = 1 To tr.Runs.Count
+                Set run = tr.Runs(i)
+                If run.Font.Size + delta >= 1 Then
+                    run.Font.Size = run.Font.Size + delta
+                End If
+            Next i
+        End If
+    End If
+
+    On Error GoTo 0
 End Sub
 ```
 
@@ -3613,33 +3672,74 @@ End Sub
 
 ```vbnet
 Sub DeckSpacingSingle()
-
     Dim sld As Slide
-    Dim shp As Shape
-    Dim tf As TextFrame2
-    Dim para As TextRange2
-    Dim p As Long
-
-    On Error Resume Next
     For Each sld In ActivePresentation.Slides
+        Dim shp As Shape
         For Each shp In sld.Shapes
-            If shp.HasTextFrame Then
-                Set tf = shp.TextFrame2
-                If tf.HasText Then
-                    For p = 1 To tf.TextRange.Paragraphs.Count
-                        Set para = tf.TextRange.Paragraphs(p)
-                        With para.ParagraphFormat
-                            .SpaceBefore = 0
-                            .SpaceAfter = 0
-                            .SpaceWithin = 1
-                        End With
-                    Next p
-                End If
-            End If
+            ApplyShapeSingleSpacing shp
         Next shp
     Next sld
-    On Error GoTo 0
+End Sub
+```
 
+### `ApplyShapeSingleSpacing`
+
+```vbnet
+Private Sub ApplyShapeSingleSpacing(shp As Shape)
+    Dim tr As TextRange
+
+    On Error Resume Next
+
+    ' --- Group ---
+    If shp.Type = msoGroup Then
+        Dim child As Shape
+        For Each child In shp.GroupItems
+            ApplyShapeSingleSpacing child
+        Next child
+        Exit Sub
+    End If
+
+    ' --- Table ---
+    If shp.HasTable Then
+        Dim tbl As Table
+        Dim r As Long, c As Long
+        Set tbl = shp.Table
+        For r = 1 To tbl.Rows.Count
+            For c = 1 To tbl.Columns.Count
+                Err.Clear
+                Set tr = tbl.Cell(r, c).Shape.TextFrame.TextRange
+                With tr.ParagraphFormat
+                    .LineRuleBefore = msoFalse
+                    .SpaceBefore = 0
+                    .LineRuleAfter = msoFalse
+                    .SpaceAfter = 0
+                    .LineRuleWithin = msoFalse
+                    .SpaceWithin = 0
+                    .LineRuleWithin = msoTrue
+                    .SpaceWithin = 1
+                End With
+            Next c
+        Next r
+        Exit Sub
+    End If
+
+    ' --- Regular text frame ---
+    If shp.HasTextFrame Then
+        Err.Clear
+        Set tr = shp.TextFrame.TextRange
+        With tr.ParagraphFormat
+            .LineRuleBefore = msoFalse
+            .SpaceBefore = 0
+            .LineRuleAfter = msoFalse
+            .SpaceAfter = 0
+            .LineRuleWithin = msoFalse
+            .SpaceWithin = 0
+            .LineRuleWithin = msoTrue
+            .SpaceWithin = 1
+        End With
+    End If
+
+    On Error GoTo 0
 End Sub
 ```
 
@@ -3691,26 +3791,53 @@ End Sub
 
 ```vbnet
 Private Sub ApplyFontToDeck(f As String)
-
     Dim sld As Slide
-    Dim shp As Shape
-    Dim tf As TextFrame2
-
-    On Error Resume Next
     For Each sld In ActivePresentation.Slides
+        Dim shp As Shape
         For Each shp In sld.Shapes
-            If shp.HasTextFrame Then
-                Set tf = shp.TextFrame2
-                If tf.HasText Then
-                    tf.TextRange.Font.Name = f
-                End If
-            End If
+            ApplyShapeFont shp, f
         Next shp
     Next sld
-    On Error GoTo 0
-
     MsgBox "Font applied: " & f, vbInformation, "Font"
+End Sub
+```
 
+### `ApplyShapeFont`
+
+```vbnet
+Private Sub ApplyShapeFont(shp As Shape, f As String)
+    On Error Resume Next
+
+    ' --- Group ---
+    If shp.Type = msoGroup Then
+        Dim child As Shape
+        For Each child In shp.GroupItems
+            ApplyShapeFont child, f
+        Next child
+        Exit Sub
+    End If
+
+    ' --- Table ---
+    If shp.HasTable Then
+        Dim tbl As Table
+        Dim r As Long, c As Long
+        Set tbl = shp.Table
+        For r = 1 To tbl.Rows.Count
+            For c = 1 To tbl.Columns.Count
+                tbl.Cell(r, c).Shape.TextFrame.TextRange.Font.Name = f
+            Next c
+        Next r
+        Exit Sub
+    End If
+
+    ' --- Regular text frame ---
+    If shp.HasTextFrame Then
+        If shp.TextFrame.HasText Then
+            shp.TextFrame.TextRange.Font.Name = f
+        End If
+    End If
+
+    On Error GoTo 0
 End Sub
 ```
 
