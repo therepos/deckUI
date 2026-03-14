@@ -3804,30 +3804,45 @@ End Function
 ### `GetSelectedTableAndCell`
 
 ```vbnet
-Private Function GetSelectedTableAndCell(ByRef tbl As Table, ByRef outRow As Long, ByRef outCol As Long) As Boolean
+Private Function GetSelectedTableAndCell( _
+    ByRef tbl As Table, _
+    ByRef outRow As Long, _
+    ByRef outCol As Long) As Boolean
 
-    Dim shp As Shape
     Dim sel As Selection
+    Dim shp As Shape
+    Dim r As Long
+    Dim c As Long
+    Dim selTR As TextRange
+    Dim cellTR As TextRange
 
     GetSelectedTableAndCell = False
     Set sel = ActiveWindow.Selection
 
-    On Error Resume Next
+    On Error GoTo Fail
 
-    If sel.Type = ppSelectionText Then
-        Set shp = sel.ShapeRange(1)
-        If Not shp Is Nothing Then
-            If shp.HasTable Then
-                Set tbl = shp.Table
-                If FindCellByTextRange(tbl, sel.TextRange, outRow, outCol) Then
-                    GetSelectedTableAndCell = True
-                End If
+    If sel.Type <> ppSelectionText Then Exit Function
+
+    Set shp = sel.ShapeRange(1)
+    If shp Is Nothing Then Exit Function
+    If Not shp.HasTable Then Exit Function
+
+    Set tbl = shp.Table
+    Set selTR = sel.TextRange
+
+    For r = 1 To tbl.Rows.Count
+        For c = 1 To tbl.Columns.Count
+            Set cellTR = tbl.Cell(r, c).Shape.TextFrame.TextRange
+            If selTR.Parent Is cellTR.Parent Then
+                outRow = r
+                outCol = c
+                GetSelectedTableAndCell = True
+                Exit Function
             End If
-        End If
-    End If
+        Next c
+    Next r
 
-    On Error GoTo 0
-
+Fail:
 End Function
 ```
 
