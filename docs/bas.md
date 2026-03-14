@@ -2627,7 +2627,7 @@ End Sub
 Public Sub RunByName(control As IRibbonControl)
     Dim macro As String
     macro = control.Tag
-    If Len(macro) = 0 Then macro = control.Id
+    If Len(macro) = 0 Then macro = control.ID
     On Error GoTo errh
     Application.Run macro
     Exit Sub
@@ -2643,58 +2643,47 @@ End Sub
 ```vbnet
 Public Sub ConvertUStoUK()
 
-    If ActivePresentation.Slides.Count = 0 Then
-        MsgBox "Presentation has no slides.", vbInformation, "US to UK English"
-        Exit Sub
-    End If
-
-    BuildDictionary
-    m_totalReplaced = 0
-
     Dim sld As Slide
     Dim shp As Shape
 
+    m_totalReplaced = 0
+
+    ' ----- Build replacement lists -----
+
+    ' -ize/-ise stems
+    Dim izeStems As String
+    izeStems = "recogn|organ|real|minim|maxim|optim|util|author" & _
+               "|categor|character|custom|emphas|final|global|harmon" & _
+               "|initial|legal|memor|modern|neutral|normal|prior" & _
+               "|special|standard|summar|symbol|synchron|apolog" & _
+               "|capital|central|critic|digit|dramat|familiar" & _
+               "|fertil|general|hospital|hypothes|ideal|immun" & _
+               "|item|jeopard|liberal|local|marginal|material" & _
+               "|mechan|mobil|monopol|national|penal|polar" & _
+               "|privat|revolution|scrutin|sensit|social|stabil" & _
+               "|steril|subsid|terror|traumat|trivial|vandal" & _
+               "|vapor|visual"
+
+    Dim stems() As String
+    stems = Split(izeStems, "|")
+
+    Dim suffixUS() As String, suffixUK() As String
+    suffixUS = Split("ize|izes|ized|izing|izer|ization", "|")
+    suffixUK = Split("ise|ises|ised|ising|iser|isation", "|")
+
+    Dim i As Long, j As Long
+
+    ' Process every slide
     For Each sld In ActivePresentation.Slides
+        ' Process every shape (including grouped, table cells, etc.)
         For Each shp In sld.Shapes
-            ProcessShape shp
+            ProcessShape shp, stems, suffixUS, suffixUK
         Next shp
     Next sld
-
-    ' Slide masters and layouts
-    Dim dsgn As Design
-    For Each dsgn In ActivePresentation.Designs
-        For Each shp In dsgn.SlideMaster.Shapes
-            ProcessShape shp
-        Next shp
-
-        Dim lay As CustomLayout
-        For Each lay In dsgn.SlideMaster.CustomLayouts
-            For Each shp In lay.Shapes
-                ProcessShape shp
-            Next shp
-        Next lay
-    Next dsgn
-
-    ' Notes pages
-    For Each sld In ActivePresentation.Slides
-        If sld.HasNotesPage Then
-            Dim nshp As Shape
-            For Each nshp In sld.NotesPage.Shapes
-                If nshp.HasTextFrame Then
-                    If nshp.TextFrame.HasText Then
-                        ProcessTextFrame nshp.TextFrame
-                    End If
-                End If
-            Next nshp
-        End If
-    Next sld
-
-    Set m_dict = Nothing
 
     If m_totalReplaced > 0 Then
-        MsgBox m_totalReplaced & " word(s) converted across " & _
-               ActivePresentation.Slides.Count & " slide(s)." & vbCrLf & _
-               "Use Ctrl+Z to undo.", vbInformation, "US to UK English"
+        MsgBox m_totalReplaced & " replacement(s) made." & vbCrLf & _
+               "Use Ctrl+Z to undo (one step at a time).", vbInformation, "US to UK English"
     Else
         MsgBox "No US English words found.", vbInformation, "US to UK English"
     End If
@@ -2705,282 +2694,141 @@ End Sub
 ### `ProcessShape`
 
 ```vbnet
-Private Sub ProcessShape(shp As Shape)
+Private Sub ProcessShape(shp As Shape, stems() As String, _
+                         suffixUS() As String, suffixUK() As String)
 
-    On Error Resume Next
+    Dim i As Long, j As Long
 
-    ' Grouped shapes
+    ' --- Grouped shapes ---
     If shp.Type = msoGroup Then
-        Dim subShp As Shape
-        For Each subShp In shp.GroupItems
-            ProcessShape subShp
-        Next subShp
+        Dim grpShp As Shape
+        For Each grpShp In shp.GroupItems
+            ProcessShape grpShp, stems, suffixUS, suffixUK
+        Next grpShp
         Exit Sub
     End If
 
-    ' Tables
+    ' --- Tables ---
     If shp.HasTable Then
-        Dim row As Long, col As Long
-        For row = 1 To shp.Table.Rows.Count
-            For col = 1 To shp.Table.Columns.Count
-                ProcessTextFrame shp.Table.Cell(row, col).Shape.TextFrame
-            Next col
-        Next row
+        Dim tbl As Table
+        Dim r As Long, c As Long
+        Set tbl = shp.Table
+        For r = 1 To tbl.Rows.Count
+            For c = 1 To tbl.Columns.Count
+                Dim cellShp As Shape
+                Set cellShp = tbl.Cell(r, c).Shape
+                If cellShp.HasTextFrame Then
+                    ReplaceInTextFrame cellShp.TextFrame, stems, suffixUS, suffixUK
+                End If
+            Next c
+        Next r
         Exit Sub
     End If
 
-    ' SmartArt
-    If shp.HasSmartArt Then
-        Dim nd As SmartArtNode
-        For Each nd In shp.SmartArt.AllNodes
-            If Not nd.TextFrame2 Is Nothing Then
-                ProcessTextFrame2 nd.TextFrame2
-            End If
-        Next nd
-        Exit Sub
-    End If
-
-    ' Charts (title)
-    If shp.HasChart Then
-        Dim cht As Chart
-        Set cht = shp.Chart
-        If cht.HasTitle Then
-            ProcessTextFrame2 cht.ChartTitle.Format.TextFrame2
-        End If
-        Exit Sub
-    End If
-
-    ' Regular text frame
+    ' --- Regular text frames ---
     If shp.HasTextFrame Then
-        If shp.TextFrame.HasText Then
-            ProcessTextFrame shp.TextFrame
-        End If
+        ReplaceInTextFrame shp.TextFrame, stems, suffixUS, suffixUK
     End If
-
-    On Error GoTo 0
 
 End Sub
 ```
 
-### `ProcessTextFrame`
+### `ReplaceInTextFrame`
 
 ```vbnet
-Private Sub ProcessTextFrame(tf As TextFrame)
-    On Error Resume Next
-    If tf.HasText Then
-        ReplaceInTextRange tf.TextRange
-    End If
-    On Error GoTo 0
+Private Sub ReplaceInTextFrame(tf As TextFrame, stems() As String, _
+                               suffixUS() As String, suffixUK() As String)
+
+    Dim i As Long, j As Long
+
+    If Not tf.HasText Then Exit Sub
+
+    ' -ize/-ise stems
+    For i = 0 To UBound(stems)
+        For j = 0 To UBound(suffixUS)
+            DoReplace tf, stems(i) & suffixUS(j), stems(i) & suffixUK(j)
+        Next j
+    Next i
+
+    ' -or/-our
+    DoReplace tf, "color", "colour": DoReplace tf, "colors", "colours"
+    DoReplace tf, "colored", "coloured": DoReplace tf, "coloring", "colouring"
+    DoReplace tf, "favor", "favour": DoReplace tf, "favors", "favours"
+    DoReplace tf, "favored", "favoured": DoReplace tf, "favoring", "favouring"
+    DoReplace tf, "favorable", "favourable"
+    DoReplace tf, "favorite", "favourite": DoReplace tf, "favorites", "favourites"
+    DoReplace tf, "honor", "honour": DoReplace tf, "honors", "honours"
+    DoReplace tf, "honored", "honoured": DoReplace tf, "honoring", "honouring"
+    DoReplace tf, "honorable", "honourable"
+    DoReplace tf, "humor", "humour": DoReplace tf, "humors", "humours"
+    DoReplace tf, "humored", "humoured": DoReplace tf, "humorous", "humourous"
+    DoReplace tf, "labor", "labour": DoReplace tf, "labors", "labours"
+    DoReplace tf, "labored", "laboured": DoReplace tf, "laboring", "labouring"
+    DoReplace tf, "neighbor", "neighbour": DoReplace tf, "neighbors", "neighbours"
+    DoReplace tf, "neighboring", "neighbouring": DoReplace tf, "neighborhood", "neighbourhood"
+    DoReplace tf, "behavior", "behaviour": DoReplace tf, "behaviors", "behaviours"
+    DoReplace tf, "behavioral", "behavioural"
+    DoReplace tf, "flavor", "flavour": DoReplace tf, "flavors", "flavours"
+    DoReplace tf, "flavored", "flavoured"
+    DoReplace tf, "harbor", "harbour": DoReplace tf, "harbors", "harbours"
+    DoReplace tf, "rumor", "rumour": DoReplace tf, "rumors", "rumours"
+    DoReplace tf, "rumored", "rumoured"
+    DoReplace tf, "tumor", "tumour": DoReplace tf, "tumors", "tumours"
+    DoReplace tf, "valor", "valour"
+    DoReplace tf, "vigor", "vigour": DoReplace tf, "vigorous", "vigourous"
+
+    ' -er/-re
+    DoReplace tf, "center", "centre": DoReplace tf, "centers", "centres"
+    DoReplace tf, "centered", "centred": DoReplace tf, "centering", "centring"
+    DoReplace tf, "fiber", "fibre": DoReplace tf, "fibers", "fibres"
+    DoReplace tf, "liter", "litre": DoReplace tf, "liters", "litres"
+    DoReplace tf, "meter", "metre": DoReplace tf, "meters", "metres"
+    DoReplace tf, "theater", "theatre": DoReplace tf, "theaters", "theatres"
+
+    ' Exact words
+    DoReplace tf, "aging", "ageing"
+    DoReplace tf, "airplane", "aeroplane": DoReplace tf, "airplanes", "aeroplanes"
+    DoReplace tf, "aluminum", "aluminium"
+    DoReplace tf, "cozy", "cosy"
+    DoReplace tf, "gray", "grey"
+    DoReplace tf, "judgment", "judgement"
+    DoReplace tf, "math", "maths"
+    DoReplace tf, "program", "programme": DoReplace tf, "programs", "programmes"
+    DoReplace tf, "check", "cheque": DoReplace tf, "checks", "cheques"
+    DoReplace tf, "curb", "kerb": DoReplace tf, "curbs", "kerbs"
+    DoReplace tf, "jewelry", "jewellery"
+    DoReplace tf, "skillful", "skilful": DoReplace tf, "skillfully", "skilfully"
+
 End Sub
 ```
 
-### `ProcessTextFrame2`
+### `DoReplace`
 
 ```vbnet
-Private Sub ProcessTextFrame2(tf2 As TextFrame2)
+Private Sub DoReplace(tf As TextFrame, usWord As String, ukWord As String)
+
+    Dim tr As TextRange
+    Dim fullText As String
+    Dim pos As Long
+    Dim wordLen As Long
+
+    wordLen = Len(usWord)
+
+    ' Use TextRange.Find for PowerPoint
     On Error Resume Next
-    If tf2.HasText Then
-        ReplaceInTextRange tf2.TextRange
-    End If
+    Set tr = tf.TextRange.Find(usWord, 0, msoTrue, msoFalse)  ' WholeWords:=True, MatchCase:=False
     On Error GoTo 0
-End Sub
-```
 
-### `ReplaceInTextRange`
-
-```vbnet
-Private Sub ReplaceInTextRange(tr As TextRange)
-    ' Walk words in reverse so that index positions stay valid
-    ' after a replacement changes string length.
-
-    Dim i As Long
-    Dim w As TextRange
-    Dim wordText As String
-    Dim lookupKey As String
-    Dim replacement As String
-    Dim isCapitalised As Boolean
-    Dim isAllCaps As Boolean
-
-    On Error Resume Next
-
-    For i = tr.Words.Count To 1 Step -1
-        Set w = tr.Words(i)
-        wordText = Trim$(w.Text)
-
-        ' Strip trailing punctuation for lookup
-        Dim clean As String
-        clean = StripPunctuation(wordText)
-
-        If Len(clean) = 0 Then GoTo NextWord
-
-        ' Determine case pattern
-        lookupKey = LCase$(clean)
-
-        If Not m_dict.Exists(lookupKey) Then GoTo NextWord
-
-        replacement = m_dict(lookupKey)
-
-        ' Preserve original case
-        isAllCaps = (clean = UCase$(clean) And Len(clean) > 1)
-        isCapitalised = (Left$(clean, 1) = UCase$(Left$(clean, 1))) And Not isAllCaps
-
-        If isAllCaps Then
-            replacement = UCase$(replacement)
-        ElseIf isCapitalised Then
-            replacement = UCase$(Left$(replacement, 1)) & Mid$(replacement, 2)
-        End If
-
-        ' Replace only the clean portion, preserving trailing punctuation
-        Dim suffix As String
-        suffix = Mid$(wordText, Len(clean) + 1)
-        w.Text = replacement & suffix
-
+    Do While Not tr Is Nothing
+        tr.Text = ukWord
         m_totalReplaced = m_totalReplaced + 1
 
-NextWord:
-    Next i
+        ' Find next occurrence
+        On Error Resume Next
+        Set tr = tf.TextRange.Find(usWord, tr.Start + Len(ukWord) - 1, msoTrue, msoFalse)
+        On Error GoTo 0
+    Loop
 
-    On Error GoTo 0
-
-End Sub
-```
-
-### `StripPunctuation`
-
-```vbnet
-Private Function StripPunctuation(s As String) As String
-    ' Remove trailing punctuation (.,;:!? etc.) for dictionary lookup
-    Dim i As Long
-    For i = Len(s) To 1 Step -1
-        Select Case Mid$(s, i, 1)
-            Case ".", ",", ";", ":", "!", "?", """", "'", ")", "]", "}", " ", vbCr, vbLf
-                ' continue stripping
-            Case Else
-                StripPunctuation = Left$(s, i)
-                Exit Function
-        End Select
-    Next i
-    StripPunctuation = ""
-End Function
-```
-
-### `BuildDictionary`
-
-```vbnet
-Private Sub BuildDictionary()
-
-    Set m_dict = CreateObject("Scripting.Dictionary")
-    m_dict.CompareMode = vbTextCompare  ' Case-insensitive keys
-
-    ' ----- -ize / -ise (with inflections) -----
-    Dim izeRoots As Variant
-    izeRoots = Array( _
-        "recogn", "organ", "real", "minim", "maxim", "optim", "util", "author", _
-        "categor", "character", "custom", "emphas", "final", "global", "harmon", _
-        "initial", "legal", "memor", "modern", "neutral", "normal", "prior", _
-        "special", "standard", "summar", "symbol", "synchron", "apolog", _
-        "capital", "central", "critic", "digit", "dramat", "familiar", _
-        "fertil", "general", "hospital", "hypothes", "ideal", "immun", _
-        "item", "jeopard", "liberal", "local", "marginal", "material", _
-        "mechan", "mobil", "monopol", "national", "penal", "polar", _
-        "privat", "revolution", "scrutin", "sensit", "social", "stabil", _
-        "steril", "subsid", "terror", "traumat", "trivial", "vandal", _
-        "vapor", "visual")
-
-    Dim stem As Variant
-    For Each stem In izeRoots
-        AddPair CStr(stem) & "ize", CStr(stem) & "ise"
-        AddPair CStr(stem) & "izes", CStr(stem) & "ises"
-        AddPair CStr(stem) & "ized", CStr(stem) & "ised"
-        AddPair CStr(stem) & "izing", CStr(stem) & "ising"
-        AddPair CStr(stem) & "izer", CStr(stem) & "iser"
-        AddPair CStr(stem) & "izers", CStr(stem) & "isers"
-        AddPair CStr(stem) & "ization", CStr(stem) & "isation"
-        AddPair CStr(stem) & "izations", CStr(stem) & "isations"
-    Next stem
-
-    ' ----- -or / -our (with inflections) -----
-    AddGroup "color", "colour", True
-    AddGroup "favor", "favour", True
-    AddPair "favorable", "favourable"
-    AddPair "favorite", "favourite"
-    AddPair "favorites", "favourites"
-    AddGroup "honor", "honour", True
-    AddPair "honorable", "honourable"
-    AddGroup "humor", "humour", True
-    AddPair "humorous", "humourous"
-    AddGroup "labor", "labour", True
-    AddGroup "neighbor", "neighbour", True
-    AddPair "neighborhood", "neighbourhood"
-    AddPair "neighborhoods", "neighbourhoods"
-    AddGroup "behavior", "behaviour", False
-    AddPair "behavioral", "behavioural"
-    AddGroup "flavor", "flavour", True
-    AddGroup "harbor", "harbour", True
-    AddGroup "rumor", "rumour", True
-    AddGroup "tumor", "tumour", False
-    AddPair "tumors", "tumours"
-    AddPair "valor", "valour"
-    AddPair "vigor", "vigour"
-    AddPair "vigorous", "vigourous"
-
-    ' ----- -er / -re (with inflections) -----
-    AddPair "center", "centre"
-    AddPair "centers", "centres"
-    AddPair "centered", "centred"
-    AddPair "centering", "centring"
-    AddPair "fiber", "fibre"
-    AddPair "fibers", "fibres"
-    AddPair "liter", "litre"
-    AddPair "liters", "litres"
-    AddPair "meter", "metre"
-    AddPair "meters", "metres"
-    AddPair "theater", "theatre"
-    AddPair "theaters", "theatres"
-
-    ' ----- exact words -----
-    AddPair "aging", "ageing"
-    AddPair "airplane", "aeroplane"
-    AddPair "airplanes", "aeroplanes"
-    AddPair "aluminum", "aluminium"
-    AddPair "cozy", "cosy"
-    AddPair "gray", "grey"
-    AddPair "grays", "greys"
-    AddPair "judgment", "judgement"
-    AddPair "judgments", "judgements"
-    AddPair "math", "maths"
-    AddPair "program", "programme"
-    AddPair "programs", "programmes"
-    AddPair "check", "cheque"
-    AddPair "checks", "cheques"
-    AddPair "curb", "kerb"
-    AddPair "curbs", "kerbs"
-    AddPair "jewelry", "jewellery"
-    AddPair "skillful", "skilful"
-    AddPair "skillfully", "skilfully"
-
-End Sub
-```
-
-### `AddPair`
-
-```vbnet
-Private Sub AddPair(us As String, uk As String)
-    If Not m_dict.Exists(LCase$(us)) Then
-        m_dict.Add LCase$(us), LCase$(uk)
-    End If
-End Sub
-```
-
-### `AddGroup`
-
-```vbnet
-Private Sub AddGroup(usBase As String, ukBase As String, addIng As Boolean)
-    ' Adds base + s + ed (+ ing if flag set)
-    AddPair usBase, ukBase
-    AddPair usBase & "s", ukBase & "s"
-    AddPair usBase & "ed", ukBase & "ed"
-    If addIng Then AddPair usBase & "ing", ukBase & "ing"
 End Sub
 ```
 
@@ -3048,92 +2896,65 @@ End Sub
 Private Sub InsertBase64Img(base64String As String, Optional widthCm As Double = 0)
 
     Dim tempPath As String
-    Dim fileNum  As Integer
+    Dim fileNum As Integer
     Dim fileData() As Byte
-    Dim xml      As Object
-    Dim node     As Object
-    Dim pic      As Shape
-    Dim ratio    As Double
-    Dim sld      As Slide
-    Dim posLeft  As Single
-    Dim posTop   As Single
+    Dim xml As Object
+    Dim node As Object
+    Dim pic As Shape
+    Dim sld As Slide
+    Dim ratio As Double
 
     If Len(base64String) = 0 Then
         MsgBox "Image data is empty.", vbCritical
         Exit Sub
     End If
 
-    ' --- Decode base64 to temp file ---
+    ' Decode base64
     Set xml = CreateObject("MSXML2.DOMDocument")
     Set node = xml.createElement("b64")
     node.DataType = "bin.base64"
-    node.Text = base64String
+    node.text = base64String
     fileData = node.nodeTypedValue
 
-    tempPath = Environ("TEMP") & "\ey_temp_img.png"
+    ' Write to temp file
+    tempPath = Environ("TEMP") & "\deckui_temp_img.png"
     fileNum = FreeFile
     Open tempPath For Binary As #fileNum
     Put #fileNum, , fileData
     Close #fileNum
 
-    ' --- Determine target slide ---
-    On Error Resume Next
+    ' Get active slide
+    On Error GoTo errNoSlide
     Set sld = ActiveWindow.View.Slide
     On Error GoTo 0
 
-    If sld Is Nothing Then
-        MsgBox "Please select a slide first.", vbExclamation, "Insert Image"
-        Kill tempPath
-        Exit Sub
-    End If
-
-    ' --- Default position: centre of slide ---
-    posLeft = ActivePresentation.PageSetup.SlideWidth / 2
-    posTop = ActivePresentation.PageSetup.SlideHeight / 2
-
-    ' If a shape is currently selected, use its position
-    On Error Resume Next
-    If ActiveWindow.Selection.Type = ppSelectionShapes Then
-        posLeft = ActiveWindow.Selection.ShapeRange(1).Left
-        posTop = ActiveWindow.Selection.ShapeRange(1).Top
-    End If
-    On Error GoTo 0
-
-    ' --- Insert the picture ---
+    ' Insert picture onto the active slide
     Set pic = sld.Shapes.AddPicture( _
         FileName:=tempPath, _
         LinkToFile:=msoFalse, _
         SaveWithDocument:=msoTrue, _
-        Left:=0, _
-        Top:=0)
+        Left:=100, _
+        Top:=100)
 
-    ' --- Resize if widthCm specified ---
+    ' Resize only if widthCm is specified
     If widthCm > 0 Then
         ratio = pic.Height / pic.Width
         pic.LockAspectRatio = msoTrue
-        pic.Width = CmToPoints(widthCm)
+        pic.Width = Application.CentimetersToPoints(widthCm)
         pic.Height = pic.Width * ratio
     End If
 
-    ' --- Centre on target position ---
-    pic.Left = posLeft - (pic.Width / 2)
-    pic.Top = posTop - (pic.Height / 2)
-
-    ' Select the newly inserted picture
+    ' Select the new picture so user can move it
     pic.Select
 
-    ' --- Cleanup ---
     Kill tempPath
+    Exit Sub
+
+errNoSlide:
+    MsgBox "Please select a slide before inserting an image.", vbExclamation
+    If Dir(tempPath) <> "" Then Kill tempPath
 
 End Sub
-```
-
-### `CmToPoints`
-
-```vbnet
-Private Function CmToPoints(cm As Double) As Double
-    CmToPoints = cm * 28.3464567
-End Function
 ```
 
 ### `ConvertImageToBase64`
@@ -3141,16 +2962,16 @@ End Function
 ```vbnet
 Public Sub ConvertImageToBase64()
 
-    Dim fd       As FileDialog
+    Dim fd As FileDialog
     Dim filePath As String
-    Dim fileNum  As Integer
+    Dim fileNum As Integer
     Dim fileData() As Byte
-    Dim xml      As Object
-    Dim node     As Object
-    Dim outPath  As String
-    Dim base64   As String
-    Dim vbaCode  As String
-    Dim i        As Long
+    Dim xml As Object
+    Dim node As Object
+    Dim outPath As String
+    Dim base64 As String
+    Dim vbaCode As String
+    Dim i As Long
     Dim chunkSize As Long
 
     Set fd = Application.FileDialog(msoFileDialogFilePicker)
@@ -3172,7 +2993,7 @@ Public Sub ConvertImageToBase64()
         node.nodeTypedValue = fileData
 
         ' Strip all whitespace
-        base64 = node.Text
+        base64 = node.text
         base64 = Replace(base64, vbCrLf, "")
         base64 = Replace(base64, vbCr, "")
         base64 = Replace(base64, vbLf, "")
@@ -3207,10 +3028,11 @@ End Sub
 ```vbnet
 Public Sub ResetAll()
     ResetFormat
+    ResetObject
     ResetTables
     ResetHyperlinks
     MsgBox "Reset complete:" & vbCrLf & vbCrLf & _
-           "Formatting, Tables, Hyperlinks", _
+           "Formatting, Objects, Tables, Hyperlinks (All)", _
            vbInformation, "Reset"
 End Sub
 ```
@@ -3221,6 +3043,15 @@ End Sub
 Public Sub RunResetFormat()
     ResetFormat
     MsgBox "Reset complete: Formatting", vbInformation, "Reset"
+End Sub
+```
+
+### `RunResetObject`
+
+```vbnet
+Public Sub RunResetObject()
+    ResetObject
+    MsgBox "Reset complete: Objects", vbInformation, "Reset"
 End Sub
 ```
 
@@ -3246,102 +3077,59 @@ End Sub
 
 ```vbnet
 Private Sub ResetFormat()
-' Resets all text formatting across every shape on every slide
-' to Calibri 11pt, black, left-aligned, single-spaced, no bullets.
+' Clears all direct character formatting from every text frame
+' in every shape on every slide, reverting to the slide-master style.
 
     Dim sld As Slide
     Dim shp As Shape
-
-    For Each sld In ActivePresentation.Slides
-        For Each shp In sld.Shapes
-            ResetFormatInShape shp
-        Next shp
-    Next sld
-
-    ' Masters & layouts
-    Dim dsgn As Design
-    For Each dsgn In ActivePresentation.Designs
-        For Each shp In dsgn.SlideMaster.Shapes
-            ResetFormatInShape shp
-        Next shp
-        Dim lay As CustomLayout
-        For Each lay In dsgn.SlideMaster.CustomLayouts
-            For Each shp In lay.Shapes
-                ResetFormatInShape shp
-            Next shp
-        Next lay
-    Next dsgn
-
-End Sub
-```
-
-### `ResetFormatInShape`
-
-```vbnet
-Private Sub ResetFormatInShape(shp As Shape)
+    Dim tf As TextFrame2
+    Dim r As Long
 
     On Error Resume Next
-
-    If shp.Type = msoGroup Then
-        Dim subShp As Shape
-        For Each subShp In shp.GroupItems
-            ResetFormatInShape subShp
-        Next subShp
-        Exit Sub
-    End If
-
-    If shp.HasTable Then
-        Dim r As Long, c As Long
-        For r = 1 To shp.Table.Rows.Count
-            For c = 1 To shp.Table.Columns.Count
-                ResetFormatInTF shp.Table.Cell(r, c).Shape.TextFrame
-            Next c
-        Next r
-        Exit Sub
-    End If
-
-    If shp.HasTextFrame Then
-        ResetFormatInTF shp.TextFrame
-    End If
-
+    For Each sld In ActivePresentation.Slides
+        For Each shp In sld.Shapes
+            If shp.HasTextFrame Then
+                Set tf = shp.TextFrame2
+                If tf.HasText Then
+                    ' Reset each run to inherit from theme/master
+                    For r = 1 To tf.TextRange.Runs.Count
+                        With tf.TextRange.Runs(r).Font
+                            .Bold = msoFalse
+                            .Italic = msoFalse
+                            .Underline = msoFalse
+                            .Strikethrough = msoNoStrike
+                            .Subscript = msoFalse
+                            .Superscript = msoFalse
+                            .Shadow = msoFalse
+                        End With
+                    Next r
+                End If
+            End If
+        Next shp
+    Next sld
     On Error GoTo 0
 
 End Sub
 ```
 
-### `ResetFormatInTF`
+### `ResetObject`
 
 ```vbnet
-Private Sub ResetFormatInTF(tf As TextFrame)
+Private Sub ResetObject()
+' Resets all pictures / inline shapes to their original size.
+
+    Dim sld As Slide
+    Dim shp As Shape
 
     On Error Resume Next
-    If Not tf.HasText Then Exit Sub
-
-    Dim tr As TextRange
-    Set tr = tf.TextRange
-
-    With tr.Font
-        .Name = "Calibri"
-        .Size = 11
-        .Bold = msoFalse
-        .Italic = msoFalse
-        .Underline = msoFalse
-        .Color.RGB = RGB(0, 0, 0)
-        .Shadow = msoFalse
-    End With
-
-    Dim p As Long
-    For p = 1 To tr.Paragraphs.Count
-        With tr.Paragraphs(p).ParagraphFormat
-            .Alignment = ppAlignLeft
-            .SpaceBefore = 0
-            .SpaceAfter = 0
-            .SpaceWithin = 1
-            .Bullet.Type = ppBulletNone
-        End With
-        tr.Paragraphs(p).IndentLevel = 1
-    Next p
-
+    For Each sld In ActivePresentation.Slides
+        For Each shp In sld.Shapes
+            If shp.Type = msoPicture Or shp.Type = msoLinkedPicture Then
+                shp.ScaleHeight 1, msoTrue
+                shp.ScaleWidth 1, msoTrue
+            End If
+        Next shp
+    Next sld
     On Error GoTo 0
 
 End Sub
@@ -3351,92 +3139,48 @@ End Sub
 
 ```vbnet
 Private Sub ResetTables()
-' Resets every table in the presentation: clear fill, thin borders,
-' default margins, Calibri 11pt text.
+' Resets table cell padding and applies thin borders to all tables.
 
     Dim sld As Slide
     Dim shp As Shape
     Dim tbl As Table
+    Dim r As Long, c As Long
     Dim cel As Cell
-    Dim r As Long, c As Long, p As Long
-    Dim cellTR As TextRange
 
+    On Error Resume Next
     For Each sld In ActivePresentation.Slides
         For Each shp In sld.Shapes
-            On Error Resume Next
             If shp.HasTable Then
                 Set tbl = shp.Table
-
                 For r = 1 To tbl.Rows.Count
                     For c = 1 To tbl.Columns.Count
                         Set cel = tbl.Cell(r, c)
-
-                        cel.Shape.Fill.Visible = msoFalse
-
-                        With cel.Borders(ppBorderTop)
-                            .ForeColor.RGB = RGB(0, 0, 0)
-                            .Weight = 0.25
-                            .DashStyle = msoLineSolid
-                            .Visible = msoTrue
+                        With cel.Shape.TextFrame2
+                            .MarginTop = Application.CentimetersToPoints(0.05)
+                            .MarginBottom = Application.CentimetersToPoints(0.05)
+                            .MarginLeft = Application.CentimetersToPoints(0.19)
+                            .MarginRight = Application.CentimetersToPoints(0.19)
                         End With
-                        With cel.Borders(ppBorderBottom)
-                            .ForeColor.RGB = RGB(0, 0, 0)
-                            .Weight = 0.25
-                            .DashStyle = msoLineSolid
-                            .Visible = msoTrue
-                        End With
-                        With cel.Borders(ppBorderLeft)
-                            .ForeColor.RGB = RGB(0, 0, 0)
-                            .Weight = 0.25
-                            .DashStyle = msoLineSolid
-                            .Visible = msoTrue
-                        End With
-                        With cel.Borders(ppBorderRight)
-                            .ForeColor.RGB = RGB(0, 0, 0)
-                            .Weight = 0.25
-                            .DashStyle = msoLineSolid
-                            .Visible = msoTrue
-                        End With
-
-                        With cel.Shape.TextFrame
-                            .MarginTop = CmToPt(0.13)
-                            .MarginBottom = CmToPt(0.13)
-                            .MarginLeft = CmToPt(0.25)
-                            .MarginRight = CmToPt(0.25)
-                            .WordWrap = msoTrue
-                            .AutoSize = ppAutoSizeNone
-                        End With
-
-                        Set cellTR = cel.Shape.TextFrame.TextRange
-                        If Len(cellTR.Text) > 0 Then
-                            With cellTR.Font
-                                .Name = "Calibri"
-                                .Size = 11
-                                .Bold = msoFalse
-                                .Italic = msoFalse
-                                .Underline = msoFalse
-                                .Color.RGB = RGB(0, 0, 0)
-                                .Shadow = msoFalse
+                        ' Borders
+                        Dim bdr As Long
+                        For bdr = ppBorderTop To ppBorderDiagonalUp
+                            With cel.Borders(bdr)
+                                If bdr <= ppBorderRight Then
+                                    .ForeColor.RGB = RGB(0, 0, 0)
+                                    .Weight = 0.5
+                                    .Visible = msoTrue
+                                    .DashStyle = msoLineSolid
+                                Else
+                                    .Visible = msoFalse
+                                End If
                             End With
-
-                            For p = 1 To cellTR.Paragraphs.Count
-                                With cellTR.Paragraphs(p).ParagraphFormat
-                                    .Alignment = ppAlignLeft
-                                    .SpaceBefore = 0
-                                    .SpaceAfter = 0
-                                    .SpaceWithin = 1
-                                    .Bullet.Type = ppBulletNone
-                                End With
-                                cellTR.Paragraphs(p).IndentLevel = 1
-                            Next p
-                        End If
-
+                        Next bdr
                     Next c
                 Next r
             End If
-            On Error GoTo 0
         Next shp
     Next sld
+    On Error GoTo 0
 
 End Sub
 ```
@@ -3445,94 +3189,41 @@ End Sub
 
 ```vbnet
 Private Sub ResetHyperlinks()
-' Removes all hyperlinks from shapes across all slides.
+' Removes all hyperlinks from the active presentation.
 
     Dim sld As Slide
     Dim shp As Shape
-
-    For Each sld In ActivePresentation.Slides
-        For Each shp In sld.Shapes
-            RemoveHyperlinksInShape shp
-        Next shp
-    Next sld
-
-End Sub
-```
-
-### `RemoveHyperlinksInShape`
-
-```vbnet
-Private Sub RemoveHyperlinksInShape(shp As Shape)
+    Dim tf As TextFrame
+    Dim tr As TextRange
+    Dim hl As Hyperlink
+    Dim i As Long
 
     On Error Resume Next
+    For Each sld In ActivePresentation.Slides
+        ' Shape-level hyperlinks (click actions)
+        For Each shp In sld.Shapes
+            If shp.ActionSettings(ppMouseClick).Hyperlink.Address <> "" Then
+                shp.ActionSettings(ppMouseClick).Hyperlink.Address = ""
+                shp.ActionSettings(ppMouseClick).Hyperlink.SubAddress = ""
+            End If
 
-    If shp.Type = msoGroup Then
-        Dim subShp As Shape
-        For Each subShp In shp.GroupItems
-            RemoveHyperlinksInShape subShp
-        Next subShp
-        Exit Sub
-    End If
-
-    ' Shape-level hyperlink
-    If shp.ActionSettings(ppMouseClick).Hyperlink.Address <> "" Then
-        shp.ActionSettings(ppMouseClick).Hyperlink.Address = ""
-        shp.ActionSettings(ppMouseClick).Hyperlink.SubAddress = ""
-        shp.ActionSettings(ppMouseClick).Action = ppActionNone
-    End If
-
-    ' Text-level hyperlinks
-    If shp.HasTextFrame Then
-        If shp.TextFrame.HasText Then
-            Dim i As Long
-            For i = shp.TextFrame.TextRange.Runs.Count To 1 Step -1
-                With shp.TextFrame.TextRange.Runs(i).ActionSettings(ppMouseClick)
-                    If .Hyperlink.Address <> "" Or .Hyperlink.SubAddress <> "" Then
-                        .Hyperlink.Address = ""
-                        .Hyperlink.SubAddress = ""
-                        .Action = ppActionNone
-                    End If
-                End With
-            Next i
-        End If
-    End If
-
-    ' Table cell hyperlinks
-    If shp.HasTable Then
-        Dim r As Long, c As Long
-        For r = 1 To shp.Table.Rows.Count
-            For c = 1 To shp.Table.Columns.Count
-                Dim cellShp As Shape
-                Set cellShp = shp.Table.Cell(r, c).Shape
-                If cellShp.HasTextFrame Then
-                    If cellShp.TextFrame.HasText Then
-                        Dim j As Long
-                        For j = cellShp.TextFrame.TextRange.Runs.Count To 1 Step -1
-                            With cellShp.TextFrame.TextRange.Runs(j).ActionSettings(ppMouseClick)
-                                If .Hyperlink.Address <> "" Or .Hyperlink.SubAddress <> "" Then
-                                    .Hyperlink.Address = ""
-                                    .Hyperlink.SubAddress = ""
-                                    .Action = ppActionNone
-                                End If
-                            End With
-                        Next j
-                    End If
+            ' Text-level hyperlinks
+            If shp.HasTextFrame Then
+                Set tf = shp.TextFrame
+                If tf.HasText Then
+                    Set tr = tf.TextRange
+                    ' Walk hyperlinks in reverse to avoid index issues
+                    For i = tr.ActionSettings.Count To 1 Step -1
+                        tr.ActionSettings(i).Hyperlink.Address = ""
+                        tr.ActionSettings(i).Hyperlink.SubAddress = ""
+                    Next i
                 End If
-            Next c
-        Next r
-    End If
-
+            End If
+        Next shp
+    Next sld
     On Error GoTo 0
 
 End Sub
-```
-
-### `CmToPt`
-
-```vbnet
-Private Function CmToPt(ByVal cm As Double) As Double
-    CmToPt = cm * 28.3464567
-End Function
 ```
 
 ## Module `SubTable`
@@ -3564,8 +3255,10 @@ End Sub
 ### `InsertTableFormula`
 
 ```vbnet
-Private Sub InsertTableFormula(ByVal funcName As String)
+Private Sub InsertTableFormula(funcName As String)
 
+    Dim sel As Selection
+    Dim shp As Shape
     Dim tbl As Table
     Dim targetRow As Long
     Dim targetCol As Long
@@ -3576,19 +3269,67 @@ Private Sub InsertTableFormula(ByVal funcName As String)
     Dim cnt As Long
     Dim finalVal As Double
 
-    If Not GetSelectedTableAndCell(tbl, targetRow, targetCol) Then
-        MsgBox "Please place your cursor in a table cell.", vbExclamation, "Table Formula"
+    Set sel = ActiveWindow.Selection
+
+    ' We need to find the active table and the cell the user is in.
+    ' PPT doesn't expose the "active cell" directly, so we look for
+    ' a text selection inside a table shape.
+
+    If sel.Type <> ppSelectionText Then
+        MsgBox "Please click inside a table cell, then run this command.", vbExclamation
         Exit Sub
     End If
 
+    ' Walk up to find the table shape
+    Set shp = sel.ShapeRange(1)
+
+    If Not shp.HasTable Then
+        ' The parent of the text frame might be a cell shape inside a table
+        ' Try the parent shape
+        On Error GoTo notTable
+        Set shp = shp.ParentGroup
+        On Error GoTo 0
+        If Not shp.HasTable Then GoTo notTable
+    End If
+
+    Set tbl = shp.Table
+
+    ' Find which cell contains the selection by matching text range
+    Dim tr As TextRange
+    Set tr = sel.TextRange
+
+    ' Determine cell position by iterating
+    Dim found As Boolean
+    found = False
+    For r = 1 To tbl.Rows.Count
+        Dim c As Long
+        For c = 1 To tbl.Columns.Count
+            If tbl.Cell(r, c).Shape.TextFrame.TextRange.Text = tr.Text Then
+                ' Heuristic: if the text matches, assume it's our cell
+                ' (works well when user clicks into a specific cell)
+                targetRow = r
+                targetCol = c
+                found = True
+                Exit For
+            End If
+        Next c
+        If found Then Exit For
+    Next r
+
+    If Not found Then
+        ' Fallback: use last row, last column with selection
+        MsgBox "Could not determine the active cell. " & _
+               "Please place your cursor in the target cell.", vbExclamation
+        Exit Sub
+    End If
+
+    ' Calculate from rows above the target
     total = 0
     cnt = 0
 
     For r = 1 To targetRow - 1
-        On Error Resume Next
-        cellText = CleanNumericText(tbl.Cell(r, targetCol).Shape.TextFrame.TextRange.Text)
-        On Error GoTo 0
-
+        cellText = Trim$(tbl.Cell(r, targetCol).Shape.TextFrame.TextRange.Text)
+        cellText = CleanNumericText(cellText)
         If IsNumeric(cellText) And Len(cellText) > 0 Then
             val = CDbl(cellText)
             total = total + val
@@ -3596,7 +3337,8 @@ Private Sub InsertTableFormula(ByVal funcName As String)
         End If
     Next r
 
-    Select Case UCase$(funcName)
+    ' Calculate result
+    Select Case UCase(funcName)
         Case "SUM"
             finalVal = total
         Case "AVERAGE"
@@ -3607,11 +3349,15 @@ Private Sub InsertTableFormula(ByVal funcName As String)
             End If
         Case "COUNT"
             finalVal = cnt
-        Case Else
-            finalVal = 0
     End Select
 
-    tbl.Cell(targetRow, targetCol).Shape.TextFrame.TextRange.Text = Format$(finalVal, "0.00")
+    ' Write result into the target cell
+    tbl.Cell(targetRow, targetCol).Shape.TextFrame.TextRange.Text = Format(finalVal, "0.00")
+
+    Exit Sub
+
+notTable:
+    MsgBox "Please place your cursor inside a table cell.", vbExclamation
 
 End Sub
 ```
@@ -3619,55 +3365,55 @@ End Sub
 ### `SelTableBorder`
 
 ```vbnet
-Public Sub SelTableBorder()
+Sub SelTableBorder()
 
+    Dim sel As Selection
+    Dim shp As Shape
     Dim tbl As Table
-    Dim r As Long
-    Dim c As Long
+    Dim r As Long, c As Long
+    Dim cel As Cell
+    Dim bdr As Long
 
-    Set tbl = GetSelectedTable()
+    Set sel = ActiveWindow.Selection
 
-    If tbl Is Nothing Then
-        MsgBox "Please select a table or place your cursor inside one.", vbExclamation, "Table Border"
+    If sel.Type < ppSelectionShapes Then
+        MsgBox "Please select a table shape.", vbExclamation
         Exit Sub
     End If
 
     On Error Resume Next
+    Set shp = sel.ShapeRange(1)
+    On Error GoTo 0
 
+    If shp Is Nothing Then
+        MsgBox "Please select a table shape.", vbExclamation
+        Exit Sub
+    End If
+
+    If Not shp.HasTable Then
+        MsgBox "The selected shape is not a table.", vbExclamation
+        Exit Sub
+    End If
+
+    Set tbl = shp.Table
+
+    On Error Resume Next
     For r = 1 To tbl.Rows.Count
         For c = 1 To tbl.Columns.Count
-
-            With tbl.Cell(r, c).Borders(ppBorderTop)
-                .ForeColor.RGB = RGB(0, 0, 0)
-                .Weight = 0.25
-                .DashStyle = msoLineSolid
-                .Visible = msoTrue
-            End With
-
-            With tbl.Cell(r, c).Borders(ppBorderBottom)
-                .ForeColor.RGB = RGB(0, 0, 0)
-                .Weight = 0.25
-                .DashStyle = msoLineSolid
-                .Visible = msoTrue
-            End With
-
-            With tbl.Cell(r, c).Borders(ppBorderLeft)
-                .ForeColor.RGB = RGB(0, 0, 0)
-                .Weight = 0.25
-                .DashStyle = msoLineSolid
-                .Visible = msoTrue
-            End With
-
-            With tbl.Cell(r, c).Borders(ppBorderRight)
-                .ForeColor.RGB = RGB(0, 0, 0)
-                .Weight = 0.25
-                .DashStyle = msoLineSolid
-                .Visible = msoTrue
-            End With
-
+            Set cel = tbl.Cell(r, c)
+            For bdr = ppBorderTop To ppBorderRight
+                With cel.Borders(bdr)
+                    .ForeColor.RGB = RGB(0, 0, 0)
+                    .Weight = 0.5
+                    .Visible = msoTrue
+                    .DashStyle = msoLineSolid
+                End With
+            Next bdr
+            ' Hide diagonals
+            cel.Borders(ppBorderDiagonalDown).Visible = msoFalse
+            cel.Borders(ppBorderDiagonalUp).Visible = msoFalse
         Next c
     Next r
-
     On Error GoTo 0
 
 End Sub
@@ -3676,535 +3422,201 @@ End Sub
 ### `SelTableMargin`
 
 ```vbnet
-Public Sub SelTableMargin()
+Sub SelTableMargin()
 
-    Const PAD_TOP As Double = 0.05
-    Const PAD_BOTTOM As Double = 0.05
-    Const PAD_LEFT As Double = 0.19
-    Const PAD_RIGHT As Double = 0.19
+    Const PAD_TOP_CM As Double = 0.05
+    Const PAD_BOTTOM_CM As Double = 0.05
+    Const PAD_LEFT_CM As Double = 0.19
+    Const PAD_RIGHT_CM As Double = 0.19
 
+    Dim sel As Selection
+    Dim shp As Shape
     Dim tbl As Table
+    Dim r As Long, c As Long
 
-    Set tbl = GetSelectedTable()
+    Set sel = ActiveWindow.Selection
 
-    If tbl Is Nothing Then
-        MsgBox "Please select a table or place your cursor inside one.", vbExclamation, "Table Margin"
+    If sel.Type < ppSelectionShapes Then
+        MsgBox "Please select a table shape.", vbExclamation
         Exit Sub
     End If
 
-    SetTableMargins tbl, PAD_TOP, PAD_BOTTOM, PAD_LEFT, PAD_RIGHT
+    On Error Resume Next
+    Set shp = sel.ShapeRange(1)
+    On Error GoTo 0
+
+    If shp Is Nothing Or Not shp.HasTable Then
+        MsgBox "Please select a table shape.", vbExclamation
+        Exit Sub
+    End If
+
+    Set tbl = shp.Table
+
+    On Error Resume Next
+    For r = 1 To tbl.Rows.Count
+        For c = 1 To tbl.Columns.Count
+            With tbl.Cell(r, c).Shape.TextFrame2
+                .MarginTop = Application.CentimetersToPoints(PAD_TOP_CM)
+                .MarginBottom = Application.CentimetersToPoints(PAD_BOTTOM_CM)
+                .MarginLeft = Application.CentimetersToPoints(PAD_LEFT_CM)
+                .MarginRight = Application.CentimetersToPoints(PAD_RIGHT_CM)
+            End With
+        Next c
+    Next r
+    On Error GoTo 0
 
 End Sub
 ```
 
-### `DocTableMargin`
+### `DeckTableMargin`
 
 ```vbnet
-Public Sub DocTableMargin()
-
-    Const PAD_TOP As Double = 0.1
-    Const PAD_BOTTOM As Double = 0.1
-    Const PAD_LEFT As Double = 0.19
-    Const PAD_RIGHT As Double = 0.19
+Sub DeckTableMargin()
 
     Dim sld As Slide
     Dim shp As Shape
+    Dim tbl As Table
+    Dim r As Long, c As Long
 
+    On Error Resume Next
     For Each sld In ActivePresentation.Slides
         For Each shp In sld.Shapes
-            On Error Resume Next
             If shp.HasTable Then
-                SetTableMargins shp.Table, PAD_TOP, PAD_BOTTOM, PAD_LEFT, PAD_RIGHT
+                Set tbl = shp.Table
+                For r = 1 To tbl.Rows.Count
+                    For c = 1 To tbl.Columns.Count
+                        With tbl.Cell(r, c).Shape.TextFrame2
+                            .MarginTop = Application.CentimetersToPoints(0.1)
+                            .MarginBottom = Application.CentimetersToPoints(0.1)
+                            .MarginLeft = Application.CentimetersToPoints(0.19)
+                            .MarginRight = Application.CentimetersToPoints(0.19)
+                        End With
+                    Next c
+                Next r
             End If
-            On Error GoTo 0
         Next shp
     Next sld
-
-End Sub
-```
-
-### `SetTableMargins`
-
-```vbnet
-Private Sub SetTableMargins(ByVal tbl As Table, ByVal topCm As Double, ByVal bottomCm As Double, ByVal leftCm As Double, ByVal rightCm As Double)
-
-    Dim r As Long
-    Dim c As Long
-
-    On Error Resume Next
-
-    For r = 1 To tbl.Rows.Count
-        For c = 1 To tbl.Columns.Count
-            With tbl.Cell(r, c).Shape.TextFrame
-                .MarginTop = CmToPt(topCm)
-                .MarginBottom = CmToPt(bottomCm)
-                .MarginLeft = CmToPt(leftCm)
-                .MarginRight = CmToPt(rightCm)
-            End With
-        Next c
-    Next r
-
     On Error GoTo 0
 
 End Sub
-```
-
-### `SelTableAutofit`
-
-```vbnet
-Public Sub SelTableAutofit()
-
-    Const MIN_COL_W As Single = 36
-    Const H_PAD As Single = 14
-
-    Dim tbl As Table
-    Dim shp As Shape
-    Dim r As Long
-    Dim c As Long
-    Dim cellW As Single
-    Dim totalW As Single
-    Dim widthScale As Single
-    Dim newW As Single
-    Dim avgCharW As Single
-    Dim tr As TextRange
-    Dim colWidths() As Single
-
-    Set shp = GetSelectedTableShape()
-    If shp Is Nothing Then
-        MsgBox "Please select a table or place your cursor inside one.", vbExclamation, "Autofit Table"
-        Exit Sub
-    End If
-
-    Set tbl = shp.Table
-
-    ReDim colWidths(1 To tbl.Columns.Count)
-
-    For c = 1 To tbl.Columns.Count
-        colWidths(c) = MIN_COL_W
-    Next c
-
-    On Error Resume Next
-
-    For r = 1 To tbl.Rows.Count
-        For c = 1 To tbl.Columns.Count
-            Set tr = tbl.Cell(r, c).Shape.TextFrame.TextRange
-            If Len(tr.Text) > 0 Then
-                avgCharW = tr.Font.Size * 0.55
-                cellW = (Len(tr.Text) * avgCharW) + H_PAD
-                If cellW > colWidths(c) Then
-                    colWidths(c) = cellW
-                End If
-            End If
-        Next c
-    Next r
-
-    totalW = 0
-    For c = 1 To tbl.Columns.Count
-        totalW = totalW + colWidths(c)
-    Next c
-
-    If totalW > 0 Then
-        widthScale = shp.Width / totalW
-
-        For c = 1 To tbl.Columns.Count
-            newW = colWidths(c) * widthScale
-            tbl.Columns(c).Width = newW
-        Next c
-    End If
-
-    For r = 1 To tbl.Rows.Count
-        tbl.Rows(r).Height = 0
-    Next r
-
-    On Error GoTo 0
-
-End Sub
-```
-
-### `SelTableReset`
-
-```vbnet
-Public Sub SelTableReset()
-
-    Dim shp As Shape
-    Dim tbl As Table
-    Dim cel As Cell
-    Dim cellTR As TextRange
-    Dim r As Long
-    Dim c As Long
-    Dim p As Long
-
-    Set shp = GetSelectedTableShape()
-    If shp Is Nothing Then
-        MsgBox "Please select a table or place your cursor inside one.", vbExclamation, "Reset Table"
-        Exit Sub
-    End If
-
-    Set tbl = shp.Table
-
-    On Error Resume Next
-
-    For r = 1 To tbl.Rows.Count
-        For c = 1 To tbl.Columns.Count
-
-            Set cel = tbl.Cell(r, c)
-
-            cel.Shape.Fill.Visible = msoFalse
-
-            cel.Borders(ppBorderTop).Visible = msoFalse
-            cel.Borders(ppBorderBottom).Visible = msoFalse
-            cel.Borders(ppBorderLeft).Visible = msoFalse
-            cel.Borders(ppBorderRight).Visible = msoFalse
-
-            With cel.Shape.TextFrame
-                .MarginTop = CmToPt(0.13)
-                .MarginBottom = CmToPt(0.13)
-                .MarginLeft = CmToPt(0.25)
-                .MarginRight = CmToPt(0.25)
-                .WordWrap = msoTrue
-                .AutoSize = ppAutoSizeNone
-            End With
-
-            Set cellTR = cel.Shape.TextFrame.TextRange
-
-            If Len(cellTR.Text) > 0 Then
-                With cellTR.Font
-                    .Name = "Calibri"
-                    .Size = 11
-                    .Bold = msoFalse
-                    .Italic = msoFalse
-                    .Underline = msoFalse
-                    .Color.RGB = RGB(0, 0, 0)
-                    .Shadow = msoFalse
-                End With
-
-                For p = 1 To cellTR.Paragraphs.Count
-                    With cellTR.Paragraphs(p).ParagraphFormat
-                        .Alignment = ppAlignLeft
-                        .SpaceBefore = 0
-                        .SpaceAfter = 0
-                        .SpaceWithin = 1
-                        .Bullet.Type = ppBulletNone
-                    End With
-                    cellTR.Paragraphs(p).IndentLevel = 1
-                Next p
-            End If
-
-        Next c
-    Next r
-
-    On Error GoTo 0
-
-End Sub
-```
-
-### `GetSelectedTable`
-
-```vbnet
-Private Function GetSelectedTable() As Table
-
-    Dim shp As Shape
-
-    Set shp = GetSelectedTableShape()
-    If Not shp Is Nothing Then
-        Set GetSelectedTable = shp.Table
-    Else
-        Set GetSelectedTable = Nothing
-    End If
-
-End Function
-```
-
-### `GetSelectedTableShape`
-
-```vbnet
-Private Function GetSelectedTableShape() As Shape
-
-    Dim sel As Selection
-    Dim shp As Shape
-
-    Set GetSelectedTableShape = Nothing
-    Set sel = ActiveWindow.Selection
-
-    On Error Resume Next
-
-    If sel.Type = ppSelectionShapes Or sel.Type = ppSelectionText Then
-        Set shp = sel.ShapeRange(1)
-        If Not shp Is Nothing Then
-            If shp.HasTable Then
-                Set GetSelectedTableShape = shp
-            End If
-        End If
-    End If
-
-    On Error GoTo 0
-
-End Function
-```
-
-### `GetSelectedTableAndCell`
-
-```vbnet
-Private Function GetSelectedTableAndCell( _
-    ByRef tbl As Table, _
-    ByRef outRow As Long, _
-    ByRef outCol As Long) As Boolean
-
-    Dim sel As Selection
-    Dim shp As Shape
-    Dim r As Long
-    Dim c As Long
-    Dim selTR As TextRange
-    Dim cellTR As TextRange
-
-    GetSelectedTableAndCell = False
-    Set sel = ActiveWindow.Selection
-
-    On Error GoTo Fail
-
-    If sel.Type <> ppSelectionText Then Exit Function
-
-    Set shp = sel.ShapeRange(1)
-    If shp Is Nothing Then Exit Function
-    If Not shp.HasTable Then Exit Function
-
-    Set tbl = shp.Table
-    Set selTR = sel.TextRange
-
-    For r = 1 To tbl.Rows.Count
-        For c = 1 To tbl.Columns.Count
-            Set cellTR = tbl.Cell(r, c).Shape.TextFrame.TextRange
-            If selTR.Parent Is cellTR.Parent Then
-                outRow = r
-                outCol = c
-                GetSelectedTableAndCell = True
-                Exit Function
-            End If
-        Next c
-    Next r
-
-Fail:
-End Function
 ```
 
 ### `CleanNumericText`
 
 ```vbnet
-Private Function CleanNumericText(ByVal s As String) As String
-
+Private Function CleanNumericText(s As String) As String
     Dim t As String
-
     t = Trim$(s)
     t = Replace(t, ",", "")
     t = Replace(t, "$", "")
     t = Replace(t, vbTab, "")
     t = Replace(t, vbCr, "")
     t = Replace(t, vbLf, "")
-
+    t = Replace(t, Chr(13), "")
     If InStr(t, "(") > 0 And InStr(t, ")") > 0 Then
         t = Replace(t, "(", "-")
         t = Replace(t, ")", "")
     End If
-
     CleanNumericText = Trim$(t)
-
-End Function
-```
-
-### `CmToPt`
-
-```vbnet
-Private Function CmToPt(ByVal cm As Double) As Double
-    CmToPt = cm * 28.3464567
 End Function
 ```
 
 ## Module `Subs`
 
-### `DocFontSizeDecrease`
+### `DeckFontSizeDecrease`
 
 ```vbnet
-Sub DocFontSizeDecrease()
-    ChangeFontSizeAll -1
-End Sub
-```
-
-### `DocFontSizeIncrease`
-
-```vbnet
-Sub DocFontSizeIncrease()
-    ChangeFontSizeAll 1
-End Sub
-```
-
-### `ChangeFontSizeAll`
-
-```vbnet
-Private Sub ChangeFontSizeAll(delta As Single)
+Sub DeckFontSizeDecrease()
 
     Dim sld As Slide
     Dim shp As Shape
+    Dim tf As TextFrame2
+    Dim rng As TextRange2
+    Dim para As TextRange2
+    Dim r As Long
 
+    On Error Resume Next
     For Each sld In ActivePresentation.Slides
         For Each shp In sld.Shapes
-            ChangeFontSizeInShape shp, delta
+            If shp.HasTextFrame Then
+                Set tf = shp.TextFrame2
+                If tf.HasText Then
+                    For r = 1 To tf.TextRange.Runs.Count
+                        Set rng = tf.TextRange.Runs(r)
+                        If rng.Font.Size > 1 Then
+                            rng.Font.Size = rng.Font.Size - 1
+                        End If
+                    Next r
+                End If
+            End If
         Next shp
     Next sld
-
-    ' Masters & layouts
-    Dim dsgn As Design
-    For Each dsgn In ActivePresentation.Designs
-        For Each shp In dsgn.SlideMaster.Shapes
-            ChangeFontSizeInShape shp, delta
-        Next shp
-        Dim lay As CustomLayout
-        For Each lay In dsgn.SlideMaster.CustomLayouts
-            For Each shp In lay.Shapes
-                ChangeFontSizeInShape shp, delta
-            Next shp
-        Next lay
-    Next dsgn
-
-End Sub
-```
-
-### `ChangeFontSizeInShape`
-
-```vbnet
-Private Sub ChangeFontSizeInShape(shp As Shape, delta As Single)
-
-    On Error Resume Next
-
-    If shp.Type = msoGroup Then
-        Dim subShp As Shape
-        For Each subShp In shp.GroupItems
-            ChangeFontSizeInShape subShp, delta
-        Next subShp
-        Exit Sub
-    End If
-
-    If shp.HasTable Then
-        Dim r As Long, c As Long
-        For r = 1 To shp.Table.Rows.Count
-            For c = 1 To shp.Table.Columns.Count
-                ChangeFontSizeInTF shp.Table.Cell(r, c).Shape.TextFrame, delta
-            Next c
-        Next r
-        Exit Sub
-    End If
-
-    If shp.HasTextFrame Then
-        ChangeFontSizeInTF shp.TextFrame, delta
-    End If
-
     On Error GoTo 0
 
 End Sub
 ```
 
-### `ChangeFontSizeInTF`
+### `DeckFontSizeIncrease`
 
 ```vbnet
-Private Sub ChangeFontSizeInTF(tf As TextFrame, delta As Single)
-
-    On Error Resume Next
-    If Not tf.HasText Then Exit Sub
-
-    Dim i As Long
-    For i = 1 To tf.TextRange.Runs.Count
-        Dim sz As Single
-        sz = tf.TextRange.Runs(i).Font.Size
-        If sz + delta >= 1 Then
-            tf.TextRange.Runs(i).Font.Size = sz + delta
-        End If
-    Next i
-
-    On Error GoTo 0
-
-End Sub
-```
-
-### `DocSpacingSingle`
-
-```vbnet
-Sub DocSpacingSingle()
+Sub DeckFontSizeIncrease()
 
     Dim sld As Slide
     Dim shp As Shape
+    Dim tf As TextFrame2
+    Dim rng As TextRange2
+    Dim r As Long
 
+    On Error Resume Next
     For Each sld In ActivePresentation.Slides
         For Each shp In sld.Shapes
-            ApplySpacingSingle shp
+            If shp.HasTextFrame Then
+                Set tf = shp.TextFrame2
+                If tf.HasText Then
+                    For r = 1 To tf.TextRange.Runs.Count
+                        Set rng = tf.TextRange.Runs(r)
+                        rng.Font.Size = rng.Font.Size + 1
+                    Next r
+                End If
+            End If
         Next shp
     Next sld
+    On Error GoTo 0
 
-    Dim dsgn As Design
-    For Each dsgn In ActivePresentation.Designs
-        For Each shp In dsgn.SlideMaster.Shapes
-            ApplySpacingSingle shp
+End Sub
+```
+
+### `DeckSpacingSingle`
+
+```vbnet
+Sub DeckSpacingSingle()
+
+    Dim sld As Slide
+    Dim shp As Shape
+    Dim tf As TextFrame2
+    Dim para As TextRange2
+    Dim p As Long
+
+    On Error Resume Next
+    For Each sld In ActivePresentation.Slides
+        For Each shp In sld.Shapes
+            If shp.HasTextFrame Then
+                Set tf = shp.TextFrame2
+                If tf.HasText Then
+                    For p = 1 To tf.TextRange.Paragraphs.Count
+                        Set para = tf.TextRange.Paragraphs(p)
+                        With para.ParagraphFormat
+                            .SpaceBefore = 0
+                            .SpaceAfter = 0
+                            .SpaceWithin = 1
+                        End With
+                    Next p
+                End If
+            End If
         Next shp
-        Dim lay As CustomLayout
-        For Each lay In dsgn.SlideMaster.CustomLayouts
-            For Each shp In lay.Shapes
-                ApplySpacingSingle shp
-            Next shp
-        Next lay
-    Next dsgn
-
-End Sub
-```
-
-### `ApplySpacingSingle`
-
-```vbnet
-Private Sub ApplySpacingSingle(shp As Shape)
-
-    On Error Resume Next
-
-    If shp.Type = msoGroup Then
-        Dim subShp As Shape
-        For Each subShp In shp.GroupItems
-            ApplySpacingSingle subShp
-        Next subShp
-        Exit Sub
-    End If
-
-    If shp.HasTable Then
-        Dim r As Long, c As Long
-        For r = 1 To shp.Table.Rows.Count
-            For c = 1 To shp.Table.Columns.Count
-                SetSpacingSingleTF shp.Table.Cell(r, c).Shape.TextFrame
-            Next c
-        Next r
-        Exit Sub
-    End If
-
-    If shp.HasTextFrame Then
-        SetSpacingSingleTF shp.TextFrame
-    End If
-
+    Next sld
     On Error GoTo 0
 
-End Sub
-```
-
-### `SetSpacingSingleTF`
-
-```vbnet
-Private Sub SetSpacingSingleTF(tf As TextFrame)
-    On Error Resume Next
-    If Not tf.HasText Then Exit Sub
-
-    Dim i As Long
-    For i = 1 To tf.TextRange.Paragraphs.Count
-        With tf.TextRange.Paragraphs(i).ParagraphFormat
-            .SpaceBefore = 0
-            .SpaceAfter = 0
-            .SpaceWithin = 1
-        End With
-    Next i
-
-    On Error GoTo 0
 End Sub
 ```
 
@@ -4213,7 +3625,7 @@ End Sub
 ```vbnet
 Public Sub RunPresetFontArial()
     SavePref "LastFont", "Arial"
-    ApplyFontToPresentation "Arial"
+    ApplyFontToDeck "Arial"
 End Sub
 ```
 
@@ -4222,7 +3634,7 @@ End Sub
 ```vbnet
 Public Sub RunPresetFontEY()
     SavePref "LastFont", "EYInterstate Light"
-    ApplyFontToPresentation "EYInterstate Light"
+    ApplyFontToDeck "EYInterstate Light"
 End Sub
 ```
 
@@ -4231,7 +3643,7 @@ End Sub
 ```vbnet
 Public Sub RunPresetFontTimes()
     SavePref "LastFont", "Times New Roman"
-    ApplyFontToPresentation "Times New Roman"
+    ApplyFontToDeck "Times New Roman"
 End Sub
 ```
 
@@ -4240,7 +3652,7 @@ End Sub
 ```vbnet
 Public Sub RunPresetFontCalibri()
     SavePref "LastFont", "Calibri"
-    ApplyFontToPresentation "Calibri"
+    ApplyFontToDeck "Calibri"
 End Sub
 ```
 
@@ -4248,111 +3660,34 @@ End Sub
 
 ```vbnet
 Public Sub RunPresetFontRepeat()
-    ApplyFontToPresentation GetPref("LastFont", "Arial")
+    ApplyFontToDeck GetPref("LastFont", "Arial")
 End Sub
 ```
 
-### `ApplyFontToPresentation`
+### `ApplyFontToDeck`
 
 ```vbnet
-Private Sub ApplyFontToPresentation(f As String)
+Private Sub ApplyFontToDeck(f As String)
 
     Dim sld As Slide
     Dim shp As Shape
+    Dim tf As TextFrame2
 
+    On Error Resume Next
     For Each sld In ActivePresentation.Slides
         For Each shp In sld.Shapes
-            ApplyFontToShape shp, f
+            If shp.HasTextFrame Then
+                Set tf = shp.TextFrame2
+                If tf.HasText Then
+                    tf.TextRange.Font.Name = f
+                End If
+            End If
         Next shp
-
-        ' Notes page
-        If sld.HasNotesPage Then
-            Dim nshp As Shape
-            For Each nshp In sld.NotesPage.Shapes
-                ApplyFontToShape nshp, f
-            Next nshp
-        End If
     Next sld
-
-    ' Masters & layouts
-    Dim dsgn As Design
-    For Each dsgn In ActivePresentation.Designs
-        For Each shp In dsgn.SlideMaster.Shapes
-            ApplyFontToShape shp, f
-        Next shp
-        Dim lay As CustomLayout
-        For Each lay In dsgn.SlideMaster.CustomLayouts
-            For Each shp In lay.Shapes
-                ApplyFontToShape shp, f
-            Next shp
-        Next lay
-    Next dsgn
+    On Error GoTo 0
 
     MsgBox "Font applied: " & f, vbInformation, "Font"
 
-End Sub
-```
-
-### `ApplyFontToShape`
-
-```vbnet
-Private Sub ApplyFontToShape(shp As Shape, f As String)
-
-    On Error Resume Next
-
-    If shp.Type = msoGroup Then
-        Dim subShp As Shape
-        For Each subShp In shp.GroupItems
-            ApplyFontToShape subShp, f
-        Next subShp
-        Exit Sub
-    End If
-
-    If shp.HasTable Then
-        Dim r As Long, c As Long
-        For r = 1 To shp.Table.Rows.Count
-            For c = 1 To shp.Table.Columns.Count
-                ApplyFontToTF shp.Table.Cell(r, c).Shape.TextFrame, f
-            Next c
-        Next r
-        Exit Sub
-    End If
-
-    If shp.HasSmartArt Then
-        Dim nd As SmartArtNode
-        For Each nd In shp.SmartArt.AllNodes
-            If Not nd.TextFrame2 Is Nothing Then
-                nd.TextFrame2.TextRange.Font.Name = f
-            End If
-        Next nd
-        Exit Sub
-    End If
-
-    If shp.HasChart Then
-        If shp.Chart.HasTitle Then
-            shp.Chart.ChartTitle.Format.TextFrame2.TextRange.Font.Name = f
-        End If
-        Exit Sub
-    End If
-
-    If shp.HasTextFrame Then
-        ApplyFontToTF shp.TextFrame, f
-    End If
-
-    On Error GoTo 0
-
-End Sub
-```
-
-### `ApplyFontToTF`
-
-```vbnet
-Private Sub ApplyFontToTF(tf As TextFrame, f As String)
-    On Error Resume Next
-    If tf.HasText Then
-        tf.TextRange.Font.Name = f
-    End If
-    On Error GoTo 0
 End Sub
 ```
 
@@ -4402,97 +3737,46 @@ End Sub
 Private Sub FormatSelectedNumbers(fmt As String, prefix As String)
 
     Dim sel As Selection
+    Dim tr As TextRange
+    Dim cellText As String
+    Dim val As Double
+
     Set sel = ActiveWindow.Selection
 
-    ' --- Text is highlighted (works in text box, table cell, title, etc.) ---
+    ' --- Case 1: Text selected in a shape or table cell ---
     If sel.Type = ppSelectionText Then
-        FormatNumInTextRange sel.TextRange, fmt, prefix
+        Set tr = sel.TextRange
+        cellText = CleanNumericText(tr.Text)
+        If IsNumeric(cellText) And Len(cellText) > 0 Then
+            val = CDbl(cellText)
+            tr.Text = FormatValue(val, fmt, prefix)
+        End If
         Exit Sub
     End If
 
-    ' --- Whole shape(s) selected — format all text inside ---
+    ' --- Case 2: A table shape is selected — format all cells ---
     If sel.Type = ppSelectionShapes Then
-        Dim i As Long
-        For i = 1 To sel.ShapeRange.Count
-            FormatNumInShape sel.ShapeRange(i), fmt, prefix
-        Next i
-        Exit Sub
-    End If
-
-    MsgBox "Please select text or a shape containing numbers.", _
-           vbExclamation, "Number Format"
-
-End Sub
-```
-
-### `FormatNumInShape`
-
-```vbnet
-Private Sub FormatNumInShape(shp As Shape, fmt As String, prefix As String)
-
-    On Error Resume Next
-
-    If shp.Type = msoGroup Then
-        Dim subShp As Shape
-        For Each subShp In shp.GroupItems
-            FormatNumInShape subShp, fmt, prefix
-        Next subShp
-        Exit Sub
-    End If
-
-    If shp.HasTable Then
+        Dim shp As Shape
+        Dim tbl As Table
         Dim r As Long, c As Long
-        For r = 1 To shp.Table.Rows.Count
-            For c = 1 To shp.Table.Columns.Count
-                FormatNumInTextRange _
-                    shp.Table.Cell(r, c).Shape.TextFrame.TextRange, fmt, prefix
-            Next c
-        Next r
-        Exit Sub
+
+        For Each shp In sel.ShapeRange
+            If shp.HasTable Then
+                Set tbl = shp.Table
+                For r = 1 To tbl.Rows.Count
+                    For c = 1 To tbl.Columns.Count
+                        Set tr = tbl.Cell(r, c).Shape.TextFrame.TextRange
+                        cellText = CleanNumericText(tr.Text)
+                        If IsNumeric(cellText) And Len(cellText) > 0 Then
+                            val = CDbl(cellText)
+                            tr.Text = FormatValue(val, fmt, prefix)
+                            tr.ParagraphFormat.Alignment = ppAlignRight
+                        End If
+                    Next c
+                Next r
+            End If
+        Next shp
     End If
-
-    If shp.HasTextFrame Then
-        If shp.TextFrame.HasText Then
-            FormatNumInTextRange shp.TextFrame.TextRange, fmt, prefix
-        End If
-    End If
-
-    On Error GoTo 0
-
-End Sub
-```
-
-### `FormatNumInTextRange`
-
-```vbnet
-Private Sub FormatNumInTextRange(tr As TextRange, fmt As String, prefix As String)
-
-    On Error Resume Next
-
-    ' Try the whole range as a single number first
-    Dim txt As String
-    txt = CleanNumericText(tr.Text)
-
-    If IsNumeric(txt) And Len(txt) > 0 Then
-        Dim val As Double
-        val = CDbl(txt)
-        tr.Text = FormatValue(val, fmt, prefix)
-        tr.ParagraphFormat.Alignment = ppAlignRight
-        Exit Sub
-    End If
-
-    ' Otherwise try each paragraph individually
-    Dim p As Long
-    For p = tr.Paragraphs.Count To 1 Step -1
-        Dim pTxt As String
-        pTxt = CleanNumericText(tr.Paragraphs(p).Text)
-        If IsNumeric(pTxt) And Len(pTxt) > 0 Then
-            tr.Paragraphs(p).Text = FormatValue(CDbl(pTxt), fmt, prefix)
-            tr.Paragraphs(p).ParagraphFormat.Alignment = ppAlignRight
-        End If
-    Next p
-
-    On Error GoTo 0
 
 End Sub
 ```
@@ -4529,93 +3813,41 @@ End Sub
 Private Sub FormatSelectedDates(fmt As String)
 
     Dim sel As Selection
+    Dim tr As TextRange
+    Dim cellText As String
+
     Set sel = ActiveWindow.Selection
 
-    ' --- Text is highlighted ---
     If sel.Type = ppSelectionText Then
-        FormatDateInTextRange sel.TextRange, fmt
+        Set tr = sel.TextRange
+        cellText = Trim$(tr.Text)
+        If IsDate(cellText) Then
+            tr.Text = Format(CDate(cellText), fmt)
+        End If
         Exit Sub
     End If
 
-    ' --- Whole shape(s) selected ---
+    ' Table shape selected — format all cells
     If sel.Type = ppSelectionShapes Then
-        Dim i As Long
-        For i = 1 To sel.ShapeRange.Count
-            FormatDateInShape sel.ShapeRange(i), fmt
-        Next i
-        Exit Sub
-    End If
-
-    MsgBox "Please select text or a shape containing dates.", _
-           vbExclamation, "Date Format"
-
-End Sub
-```
-
-### `FormatDateInShape`
-
-```vbnet
-Private Sub FormatDateInShape(shp As Shape, fmt As String)
-
-    On Error Resume Next
-
-    If shp.Type = msoGroup Then
-        Dim subShp As Shape
-        For Each subShp In shp.GroupItems
-            FormatDateInShape subShp, fmt
-        Next subShp
-        Exit Sub
-    End If
-
-    If shp.HasTable Then
+        Dim shp As Shape
+        Dim tbl As Table
         Dim r As Long, c As Long
-        For r = 1 To shp.Table.Rows.Count
-            For c = 1 To shp.Table.Columns.Count
-                FormatDateInTextRange _
-                    shp.Table.Cell(r, c).Shape.TextFrame.TextRange, fmt
-            Next c
-        Next r
-        Exit Sub
+
+        For Each shp In sel.ShapeRange
+            If shp.HasTable Then
+                Set tbl = shp.Table
+                For r = 1 To tbl.Rows.Count
+                    For c = 1 To tbl.Columns.Count
+                        Set tr = tbl.Cell(r, c).Shape.TextFrame.TextRange
+                        cellText = Trim$(tr.Text)
+                        If IsDate(cellText) Then
+                            tr.Text = Format(CDate(cellText), fmt)
+                        End If
+                    Next c
+                Next r
+            End If
+        Next shp
     End If
-
-    If shp.HasTextFrame Then
-        If shp.TextFrame.HasText Then
-            FormatDateInTextRange shp.TextFrame.TextRange, fmt
-        End If
-    End If
-
-    On Error GoTo 0
-
-End Sub
-```
-
-### `FormatDateInTextRange`
-
-```vbnet
-Private Sub FormatDateInTextRange(tr As TextRange, fmt As String)
-
-    On Error Resume Next
-
-    ' Try the whole range as a single date
-    Dim txt As String
-    txt = Trim$(tr.Text)
-
-    If IsDate(txt) Then
-        tr.Text = Format(CDate(txt), fmt)
-        Exit Sub
-    End If
-
-    ' Otherwise try each paragraph
-    Dim p As Long
-    For p = tr.Paragraphs.Count To 1 Step -1
-        Dim pTxt As String
-        pTxt = Trim$(tr.Paragraphs(p).Text)
-        If IsDate(pTxt) Then
-            tr.Paragraphs(p).Text = Format(CDate(pTxt), fmt)
-        End If
-    Next p
-
-    On Error GoTo 0
 
 End Sub
 ```
@@ -4648,6 +3880,7 @@ Private Function CleanNumericText(s As String) As String
     t = Replace(t, vbTab, "")
     t = Replace(t, vbCr, "")
     t = Replace(t, vbLf, "")
+    t = Replace(t, Chr(13), "")
     If InStr(t, "(") > 0 And InStr(t, ")") > 0 Then
         t = Replace(t, "(", "-")
         t = Replace(t, ")", "")
