@@ -1,10 +1,10 @@
+Option Explicit
+
 ' ============================================================
 ' US to UK English Converter — PowerPoint Edition
 ' ============================================================
 ' PowerPoint has no Find/Replace API, so we walk every text
 ' range word-by-word and swap via a Dictionary (O(1) lookup).
-' This is far faster than nested loops comparing against an
-' array of hundreds of pairs.
 ' ============================================================
 
 Private m_dict As Object  ' Scripting.Dictionary
@@ -29,7 +29,7 @@ Public Sub ConvertUStoUK()
         Next shp
     Next sld
 
-    ' Also process slide masters and layouts
+    ' Slide masters and layouts
     Dim dsgn As Design
     For Each dsgn In ActivePresentation.Designs
         For Each shp In dsgn.SlideMaster.Shapes
@@ -109,7 +109,7 @@ Private Sub ProcessShape(shp As Shape)
         Exit Sub
     End If
 
-    ' Charts (title and axis labels)
+    ' Charts (title)
     If shp.HasChart Then
         Dim cht As Chart
         Set cht = shp.Chart

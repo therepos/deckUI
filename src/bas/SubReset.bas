@@ -3,13 +3,11 @@ Option Explicit
 ' =============================================================================
 ' MODULE: SubReset — PowerPoint Edition
 ' Purpose: Presentation-level reset operations.
-'          Ported from wordUI SubReset.bas with PPT equivalents.
 '
-' Contents:
-'   - ResetAll
-'   - RunResetFormat
-'   - RunResetTables
-'   - RunResetHyperlinks
+' Ported from wordUI. Word-only features noted:
+'   - ResetList: PPT bullets reset via ResetFormat instead
+'   - ResetObject: No InlineShapes in PPT; shapes reset via ResetFormat
+'   - ResetStylesCustom/Default: No equivalent in PPT (theme-based)
 ' =============================================================================
 
 
@@ -18,7 +16,7 @@ Public Sub ResetAll()
     ResetTables
     ResetHyperlinks
     MsgBox "Reset complete:" & vbCrLf & vbCrLf & _
-           "Formatting, Tables, Hyperlinks (All)", _
+           "Formatting, Tables, Hyperlinks", _
            vbInformation, "Reset"
 End Sub
 
@@ -39,12 +37,12 @@ End Sub
 
 
 ' ===========================================================================
-'  RESET SUBS (Private)
+'  PRIVATE IMPLEMENTATIONS
 ' ===========================================================================
 
 Private Sub ResetFormat()
-' Resets all text in the presentation to Calibri 11pt, no bold/italic/underline,
-' black text, left-aligned, single-spaced, no bullets.
+' Resets all text formatting across every shape on every slide
+' to Calibri 11pt, black, left-aligned, single-spaced, no bullets.
 
     Dim sld As Slide
     Dim shp As Shape
@@ -137,8 +135,8 @@ End Sub
 
 
 Private Sub ResetTables()
-' Resets all tables in the presentation to plain formatting:
-' no fill, thin borders, default margins, Calibri 11pt.
+' Resets every table in the presentation: clear fill, thin borders,
+' default margins, Calibri 11pt text.
 
     Dim sld As Slide
     Dim shp As Shape
@@ -157,10 +155,8 @@ Private Sub ResetTables()
                     For c = 1 To tbl.Columns.Count
                         Set cel = tbl.Cell(r, c)
 
-                        ' Clear fill
                         cel.Shape.Fill.Visible = msoFalse
 
-                        ' Reset borders to thin black
                         With cel.Borders(ppBorderTop)
                             .ForeColor.RGB = RGB(0, 0, 0)
                             .Weight = 0.25
@@ -186,7 +182,6 @@ Private Sub ResetTables()
                             .Visible = msoTrue
                         End With
 
-                        ' Reset margins
                         With cel.Shape.TextFrame
                             .MarginTop = CmToPt(0.13)
                             .MarginBottom = CmToPt(0.13)
@@ -196,7 +191,6 @@ Private Sub ResetTables()
                             .AutoSize = ppAutoSizeNone
                         End With
 
-                        ' Reset text formatting
                         Set cellTR = cel.Shape.TextFrame.TextRange
                         If Len(cellTR.Text) > 0 Then
                             With cellTR.Font
@@ -233,7 +227,6 @@ End Sub
 
 Private Sub ResetHyperlinks()
 ' Removes all hyperlinks from shapes across all slides.
-' PowerPoint hyperlinks are stored as ActionSettings on text runs and shapes.
 
     Dim sld As Slide
     Dim shp As Shape
@@ -268,11 +261,6 @@ Private Sub RemoveHyperlinksInShape(shp As Shape)
     ' Text-level hyperlinks
     If shp.HasTextFrame Then
         If shp.TextFrame.HasText Then
-            Dim hl As Hyperlink
-            Dim hlCount As Long
-            hlCount = shp.TextFrame.TextRange.ActionSettings(ppMouseClick).Hyperlink.Address <> ""
-
-            ' Walk runs in reverse to clear hyperlinks
             Dim i As Long
             For i = shp.TextFrame.TextRange.Runs.Count To 1 Step -1
                 With shp.TextFrame.TextRange.Runs(i).ActionSettings(ppMouseClick)

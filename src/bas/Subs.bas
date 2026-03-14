@@ -546,14 +546,11 @@ End Function
 
 
 ' ===== PREFERENCE STORAGE ====================================================
-' Uses Windows registry (HKEY_CURRENT_USER — no admin rights needed)
-' so preferences persist across all documents for the user.
-' App name "PPTUI" to keep separate from Word's "WordUI" prefs.
 
 Private Sub SavePref(key As String, val As String)
-    SaveSetting "PPTUI", "Preferences", key, val
+    SaveSetting "DeckUI", "Preferences", key, val
 End Sub
 
 Private Function GetPref(key As String, defaultVal As String) As String
-    GetPref = GetSetting("PPTUI", "Preferences", key, defaultVal)
+    GetPref = GetSetting("DeckUI", "Preferences", key, defaultVal)
 End Function

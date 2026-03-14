@@ -4,6 +4,14 @@ Option Explicit
 ' MODULE: SubTable — PowerPoint Edition
 ' Purpose: Table-specific operations (formulas, borders, margins, autofit, reset)
 '          Requires a table to be selected.
+'
+' Contents:
+'   - SelSumColumn / SelAverageColumn / SelCountColumn
+'   - SelTableBorder
+'   - SelTableMargin
+'   - DocTableMargin
+'   - SelTableAutofit
+'   - SelTableReset
 ' =============================================================================
 
 
@@ -126,8 +134,6 @@ Public Sub SelTableBorder()
 
     On Error GoTo 0
 
-    MsgBox "Borders applied.", vbInformation, "Table Border"
-
 End Sub
 
 
@@ -150,7 +156,6 @@ Public Sub SelTableMargin()
     End If
 
     SetTableMargins tbl, PAD_TOP, PAD_BOTTOM, PAD_LEFT, PAD_RIGHT
-    MsgBox "Table margins applied.", vbInformation, "Table Margin"
 
 End Sub
 
@@ -270,8 +275,6 @@ Public Sub SelTableAutofit()
 
     On Error GoTo 0
 
-    MsgBox "Table autofitted.", vbInformation, "Autofit Table"
-
 End Sub
 
 
@@ -347,8 +350,6 @@ Public Sub SelTableReset()
     Next r
 
     On Error GoTo 0
-
-    MsgBox "Table reset to plain formatting.", vbInformation, "Reset Table"
 
 End Sub
 
@@ -432,32 +433,6 @@ Private Function GetSelectedTableAndCell( _
     Next r
 
 Fail:
-End Function
-
-Private Function FindCellByTextRange(ByVal tbl As Table, ByVal selRange As TextRange, ByRef outRow As Long, ByRef outCol As Long) As Boolean
-
-    Dim r As Long
-    Dim c As Long
-    Dim cellTR As TextRange
-
-    FindCellByTextRange = False
-
-    On Error Resume Next
-
-    For r = 1 To tbl.Rows.Count
-        For c = 1 To tbl.Columns.Count
-            Set cellTR = tbl.Cell(r, c).Shape.TextFrame.TextRange
-            If selRange.Parent.Parent.Name = cellTR.Parent.Parent.Name Then
-                outRow = r
-                outCol = c
-                FindCellByTextRange = True
-                Exit Function
-            End If
-        Next c
-    Next r
-
-    On Error GoTo 0
-
 End Function
 
 Private Function CleanNumericText(ByVal s As String) As String

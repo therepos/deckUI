@@ -1,4 +1,3 @@
-Attribute VB_Name = "Ribbon"
 Public Ribbon As IRibbonUI
 
 Public Sub RibbonOnLoad(r As IRibbonUI)
@@ -15,4 +14,3 @@ Public Sub RunByName(control As IRibbonControl)
 errh:
     MsgBox "Macro not found: " & macro, vbExclamation
 End Sub
-

@@ -3,12 +3,8 @@ Option Explicit
 ' ============================================================
 ' Image Inserter — PowerPoint Edition
 ' ============================================================
-' Differences from Word version:
-'   - Uses ActiveWindow.Selection + Shapes.AddPicture
-'   - Positions image at centre of slide (or at selected shape
-'     location if a shape is selected)
-'   - Uses Application.CentimetersToPoints equivalent
-'     (PowerPoint uses points natively)
+' Uses Shapes.AddPicture and centres image on current slide.
+' If a shape is selected, positions at that shape's location.
 ' ============================================================
 
 Public Sub InsertLogoEYWhite()
@@ -124,8 +120,6 @@ Private Sub InsertBase64Img(base64String As String, Optional widthCm As Double =
 End Sub
 
 ' ===== UNIT CONVERSION =====
-' PowerPoint VBA doesn't have CentimetersToPoints,
-' so we provide our own.
 
 Private Function CmToPoints(cm As Double) As Double
     CmToPoints = cm * 28.3464567
