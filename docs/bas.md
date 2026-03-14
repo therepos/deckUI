@@ -2660,7 +2660,7 @@ Public Sub ConvertUStoUK()
         Next shp
     Next sld
 
-    ' Also process slide masters and layouts
+    ' Slide masters and layouts
     Dim dsgn As Design
     For Each dsgn In ActivePresentation.Designs
         For Each shp In dsgn.SlideMaster.Shapes
@@ -2740,7 +2740,7 @@ Private Sub ProcessShape(shp As Shape)
         Exit Sub
     End If
 
-    ' Charts (title and axis labels)
+    ' Charts (title)
     If shp.HasChart Then
         Dim cht As Chart
         Set cht = shp.Chart
@@ -3200,193 +3200,6 @@ Public Sub ConvertImageToBase64()
 End Sub
 ```
 
-## Module `SubPreset`
-
-### `RunPresetFontArial`
-
-```vbnet
-Public Sub RunPresetFontArial()
-    ApplyPreset "Arial"
-End Sub
-```
-
-### `RunPresetFontEY`
-
-```vbnet
-Public Sub RunPresetFontEY()
-    ApplyPreset "EYInterstate Light"
-End Sub
-```
-
-### `RunPresetFontTimes`
-
-```vbnet
-Public Sub RunPresetFontTimes()
-    ApplyPreset "Times New Roman"
-End Sub
-```
-
-### `RunPresetFontCalibri`
-
-```vbnet
-Public Sub RunPresetFontCalibri()
-    ApplyPreset "Calibri"
-End Sub
-```
-
-### `ApplyPreset`
-
-```vbnet
-Private Sub ApplyPreset(f As String)
-
-    SetPresetFont f
-    ApplyFontPreset
-    Application.StatusBar = ""
-    MsgBox "Font applied: " & f, vbInformation, "Font"
-
-End Sub
-```
-
-### `ApplyFontPreset`
-
-```vbnet
-Private Sub ApplyFontPreset()
-
-    Dim f As String
-    Dim sld As Slide
-    Dim shp As Shape
-    Dim slideNum As Long
-
-    On Error Resume Next
-    f = ActivePresentation.CustomDocumentProperties("PresetFont").Value
-    If f = "" Then f = "Arial"
-    On Error GoTo 0
-
-    ' --- Slides ---
-    For Each sld In ActivePresentation.Slides
-        slideNum = slideNum + 1
-        Application.StatusBar = "Applying font — slide " & slideNum & " of " & ActivePresentation.Slides.Count & "..."
-
-        For Each shp In sld.Shapes
-            ApplyFontToShape shp, f
-        Next shp
-
-        ' Notes page
-        If sld.HasNotesPage Then
-            Dim nshp As Shape
-            For Each nshp In sld.NotesPage.Shapes
-                ApplyFontToShape nshp, f
-            Next nshp
-        End If
-    Next sld
-
-    ' --- Slide masters & layouts ---
-    Application.StatusBar = "Applying font to masters and layouts..."
-    Dim dsgn As Design
-    For Each dsgn In ActivePresentation.Designs
-        For Each shp In dsgn.SlideMaster.Shapes
-            ApplyFontToShape shp, f
-        Next shp
-
-        Dim lay As CustomLayout
-        For Each lay In dsgn.SlideMaster.CustomLayouts
-            For Each shp In lay.Shapes
-                ApplyFontToShape shp, f
-            Next shp
-        Next lay
-    Next dsgn
-
-End Sub
-```
-
-### `ApplyFontToShape`
-
-```vbnet
-Private Sub ApplyFontToShape(shp As Shape, f As String)
-
-    On Error Resume Next
-
-    ' Grouped shapes — recurse
-    If shp.Type = msoGroup Then
-        Dim subShp As Shape
-        For Each subShp In shp.GroupItems
-            ApplyFontToShape subShp, f
-        Next subShp
-        Exit Sub
-    End If
-
-    ' Tables — each cell
-    If shp.HasTable Then
-        Dim row As Long, col As Long
-        For row = 1 To shp.Table.Rows.Count
-            For col = 1 To shp.Table.Columns.Count
-                ApplyFontToTextFrame shp.Table.Cell(row, col).Shape.TextFrame, f
-            Next col
-        Next row
-        Exit Sub
-    End If
-
-    ' SmartArt nodes
-    If shp.HasSmartArt Then
-        Dim nd As SmartArtNode
-        For Each nd In shp.SmartArt.AllNodes
-            If Not nd.TextFrame2 Is Nothing Then
-                nd.TextFrame2.TextRange.Font.Name = f
-            End If
-        Next nd
-        Exit Sub
-    End If
-
-    ' Charts — title
-    If shp.HasChart Then
-        If shp.Chart.HasTitle Then
-            shp.Chart.ChartTitle.Format.TextFrame2.TextRange.Font.Name = f
-        End If
-        Exit Sub
-    End If
-
-    ' Regular text frame
-    If shp.HasTextFrame Then
-        ApplyFontToTextFrame shp.TextFrame, f
-    End If
-
-    On Error GoTo 0
-
-End Sub
-```
-
-### `ApplyFontToTextFrame`
-
-```vbnet
-Private Sub ApplyFontToTextFrame(tf As TextFrame, f As String)
-    On Error Resume Next
-    If tf.HasText Then
-        tf.TextRange.Font.Name = f
-    End If
-    On Error GoTo 0
-End Sub
-```
-
-### `SetPresetFont`
-
-```vbnet
-Private Sub SetPresetFont(f As String)
-
-    On Error Resume Next
-    If ActivePresentation.CustomDocumentProperties("PresetFont").Name = "" Then
-        ActivePresentation.CustomDocumentProperties.Add _
-            Name:="PresetFont", _
-            LinkToContent:=False, _
-            Type:=msoPropertyTypeString, _
-            Value:=f
-    Else
-        ActivePresentation.CustomDocumentProperties("PresetFont").Value = f
-    End If
-    On Error GoTo 0
-
-End Sub
-```
-
 ## Module `SubReset`
 
 ### `ResetAll`
@@ -3397,7 +3210,7 @@ Public Sub ResetAll()
     ResetTables
     ResetHyperlinks
     MsgBox "Reset complete:" & vbCrLf & vbCrLf & _
-           "Formatting, Tables, Hyperlinks (All)", _
+           "Formatting, Tables, Hyperlinks", _
            vbInformation, "Reset"
 End Sub
 ```
@@ -3433,8 +3246,8 @@ End Sub
 
 ```vbnet
 Private Sub ResetFormat()
-' Resets all text in the presentation to Calibri 11pt, no bold/italic/underline,
-' black text, left-aligned, single-spaced, no bullets.
+' Resets all text formatting across every shape on every slide
+' to Calibri 11pt, black, left-aligned, single-spaced, no bullets.
 
     Dim sld As Slide
     Dim shp As Shape
@@ -3538,8 +3351,8 @@ End Sub
 
 ```vbnet
 Private Sub ResetTables()
-' Resets all tables in the presentation to plain formatting:
-' no fill, thin borders, default margins, Calibri 11pt.
+' Resets every table in the presentation: clear fill, thin borders,
+' default margins, Calibri 11pt text.
 
     Dim sld As Slide
     Dim shp As Shape
@@ -3558,10 +3371,8 @@ Private Sub ResetTables()
                     For c = 1 To tbl.Columns.Count
                         Set cel = tbl.Cell(r, c)
 
-                        ' Clear fill
                         cel.Shape.Fill.Visible = msoFalse
 
-                        ' Reset borders to thin black
                         With cel.Borders(ppBorderTop)
                             .ForeColor.RGB = RGB(0, 0, 0)
                             .Weight = 0.25
@@ -3587,7 +3398,6 @@ Private Sub ResetTables()
                             .Visible = msoTrue
                         End With
 
-                        ' Reset margins
                         With cel.Shape.TextFrame
                             .MarginTop = CmToPt(0.13)
                             .MarginBottom = CmToPt(0.13)
@@ -3597,7 +3407,6 @@ Private Sub ResetTables()
                             .AutoSize = ppAutoSizeNone
                         End With
 
-                        ' Reset text formatting
                         Set cellTR = cel.Shape.TextFrame.TextRange
                         If Len(cellTR.Text) > 0 Then
                             With cellTR.Font
@@ -3637,7 +3446,6 @@ End Sub
 ```vbnet
 Private Sub ResetHyperlinks()
 ' Removes all hyperlinks from shapes across all slides.
-' PowerPoint hyperlinks are stored as ActionSettings on text runs and shapes.
 
     Dim sld As Slide
     Dim shp As Shape
@@ -3676,11 +3484,6 @@ Private Sub RemoveHyperlinksInShape(shp As Shape)
     ' Text-level hyperlinks
     If shp.HasTextFrame Then
         If shp.TextFrame.HasText Then
-            Dim hl As Hyperlink
-            Dim hlCount As Long
-            hlCount = shp.TextFrame.TextRange.ActionSettings(ppMouseClick).Hyperlink.Address <> ""
-
-            ' Walk runs in reverse to clear hyperlinks
             Dim i As Long
             For i = shp.TextFrame.TextRange.Runs.Count To 1 Step -1
                 With shp.TextFrame.TextRange.Runs(i).ActionSettings(ppMouseClick)
@@ -3867,8 +3670,6 @@ Public Sub SelTableBorder()
 
     On Error GoTo 0
 
-    MsgBox "Borders applied.", vbInformation, "Table Border"
-
 End Sub
 ```
 
@@ -3892,7 +3693,6 @@ Public Sub SelTableMargin()
     End If
 
     SetTableMargins tbl, PAD_TOP, PAD_BOTTOM, PAD_LEFT, PAD_RIGHT
-    MsgBox "Table margins applied.", vbInformation, "Table Margin"
 
 End Sub
 ```
@@ -4018,8 +3818,6 @@ Public Sub SelTableAutofit()
 
     On Error GoTo 0
 
-    MsgBox "Table autofitted.", vbInformation, "Autofit Table"
-
 End Sub
 ```
 
@@ -4096,8 +3894,6 @@ Public Sub SelTableReset()
     Next r
 
     On Error GoTo 0
-
-    MsgBox "Table reset to plain formatting.", vbInformation, "Reset Table"
 
 End Sub
 ```
@@ -4188,36 +3984,6 @@ Private Function GetSelectedTableAndCell( _
     Next r
 
 Fail:
-End Function
-```
-
-### `FindCellByTextRange`
-
-```vbnet
-Private Function FindCellByTextRange(ByVal tbl As Table, ByVal selRange As TextRange, ByRef outRow As Long, ByRef outCol As Long) As Boolean
-
-    Dim r As Long
-    Dim c As Long
-    Dim cellTR As TextRange
-
-    FindCellByTextRange = False
-
-    On Error Resume Next
-
-    For r = 1 To tbl.Rows.Count
-        For c = 1 To tbl.Columns.Count
-            Set cellTR = tbl.Cell(r, c).Shape.TextFrame.TextRange
-            If selRange.Parent.Parent.Name = cellTR.Parent.Parent.Name Then
-                outRow = r
-                outCol = c
-                FindCellByTextRange = True
-                Exit Function
-            End If
-        Next c
-    Next r
-
-    On Error GoTo 0
-
 End Function
 ```
 
@@ -4894,7 +4660,7 @@ End Function
 
 ```vbnet
 Private Sub SavePref(key As String, val As String)
-    SaveSetting "PPTUI", "Preferences", key, val
+    SaveSetting "DeckUI", "Preferences", key, val
 End Sub
 ```
 
@@ -4902,6 +4668,6 @@ End Sub
 
 ```vbnet
 Private Function GetPref(key As String, defaultVal As String) As String
-    GetPref = GetSetting("PPTUI", "Preferences", key, defaultVal)
+    GetPref = GetSetting("DeckUI", "Preferences", key, defaultVal)
 End Function
 ```
