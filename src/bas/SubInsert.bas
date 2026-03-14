@@ -1,12 +1,5 @@
 Option Explicit
 
-' ============================================================
-' Image Inserter — PowerPoint Edition
-' ============================================================
-' Uses Shapes.AddPicture and centres image on current slide.
-' If a shape is selected, positions at that shape's location.
-' ============================================================
-
 Public Sub InsertLogoEYWhite()
     InsertBase64Img GetLogoEYWhite(), 2.93
 End Sub
@@ -40,105 +33,80 @@ End Sub
 Private Sub InsertBase64Img(base64String As String, Optional widthCm As Double = 0)
 
     Dim tempPath As String
-    Dim fileNum  As Integer
+    Dim fileNum As Integer
     Dim fileData() As Byte
-    Dim xml      As Object
-    Dim node     As Object
-    Dim pic      As Shape
-    Dim ratio    As Double
-    Dim sld      As Slide
-    Dim posLeft  As Single
-    Dim posTop   As Single
+    Dim xml As Object
+    Dim node As Object
+    Dim pic As Shape
+    Dim sld As Slide
+    Dim ratio As Double
 
     If Len(base64String) = 0 Then
         MsgBox "Image data is empty.", vbCritical
         Exit Sub
     End If
 
-    ' --- Decode base64 to temp file ---
+    ' Decode base64
     Set xml = CreateObject("MSXML2.DOMDocument")
     Set node = xml.createElement("b64")
     node.DataType = "bin.base64"
-    node.Text = base64String
+    node.text = base64String
     fileData = node.nodeTypedValue
 
-    tempPath = Environ("TEMP") & "\ey_temp_img.png"
+    ' Write to temp file
+    tempPath = Environ("TEMP") & "\deckui_temp_img.png"
     fileNum = FreeFile
     Open tempPath For Binary As #fileNum
     Put #fileNum, , fileData
     Close #fileNum
 
-    ' --- Determine target slide ---
-    On Error Resume Next
+    ' Get active slide
+    On Error GoTo errNoSlide
     Set sld = ActiveWindow.View.Slide
     On Error GoTo 0
 
-    If sld Is Nothing Then
-        MsgBox "Please select a slide first.", vbExclamation, "Insert Image"
-        Kill tempPath
-        Exit Sub
-    End If
-
-    ' --- Default position: centre of slide ---
-    posLeft = ActivePresentation.PageSetup.SlideWidth / 2
-    posTop = ActivePresentation.PageSetup.SlideHeight / 2
-
-    ' If a shape is currently selected, use its position
-    On Error Resume Next
-    If ActiveWindow.Selection.Type = ppSelectionShapes Then
-        posLeft = ActiveWindow.Selection.ShapeRange(1).Left
-        posTop = ActiveWindow.Selection.ShapeRange(1).Top
-    End If
-    On Error GoTo 0
-
-    ' --- Insert the picture ---
+    ' Insert picture onto the active slide
     Set pic = sld.Shapes.AddPicture( _
         FileName:=tempPath, _
         LinkToFile:=msoFalse, _
         SaveWithDocument:=msoTrue, _
-        Left:=0, _
-        Top:=0)
+        Left:=100, _
+        Top:=100)
 
-    ' --- Resize if widthCm specified ---
+    ' Resize only if widthCm is specified
     If widthCm > 0 Then
         ratio = pic.Height / pic.Width
         pic.LockAspectRatio = msoTrue
-        pic.Width = CmToPoints(widthCm)
+        pic.Width = Application.CentimetersToPoints(widthCm)
         pic.Height = pic.Width * ratio
     End If
 
-    ' --- Centre on target position ---
-    pic.Left = posLeft - (pic.Width / 2)
-    pic.Top = posTop - (pic.Height / 2)
-
-    ' Select the newly inserted picture
+    ' Select the new picture so user can move it
     pic.Select
 
-    ' --- Cleanup ---
     Kill tempPath
+    Exit Sub
+
+errNoSlide:
+    MsgBox "Please select a slide before inserting an image.", vbExclamation
+    If Dir(tempPath) <> "" Then Kill tempPath
 
 End Sub
-
-' ===== UNIT CONVERSION =====
-
-Private Function CmToPoints(cm As Double) As Double
-    CmToPoints = cm * 28.3464567
-End Function
 
 ' ===== HELPER: Run this once per image to get Base64 =====
 
 Public Sub ConvertImageToBase64()
 
-    Dim fd       As FileDialog
+    Dim fd As FileDialog
     Dim filePath As String
-    Dim fileNum  As Integer
+    Dim fileNum As Integer
     Dim fileData() As Byte
-    Dim xml      As Object
-    Dim node     As Object
-    Dim outPath  As String
-    Dim base64   As String
-    Dim vbaCode  As String
-    Dim i        As Long
+    Dim xml As Object
+    Dim node As Object
+    Dim outPath As String
+    Dim base64 As String
+    Dim vbaCode As String
+    Dim i As Long
     Dim chunkSize As Long
 
     Set fd = Application.FileDialog(msoFileDialogFilePicker)
@@ -160,7 +128,7 @@ Public Sub ConvertImageToBase64()
         node.nodeTypedValue = fileData
 
         ' Strip all whitespace
-        base64 = node.Text
+        base64 = node.text
         base64 = Replace(base64, vbCrLf, "")
         base64 = Replace(base64, vbCr, "")
         base64 = Replace(base64, vbLf, "")
