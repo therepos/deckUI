@@ -66,11 +66,10 @@ Private Sub ResetFormat()
                         With tf.TextRange.Runs(r).Font
                             .Bold = msoFalse
                             .Italic = msoFalse
-                            .Underline = msoFalse
-                            .Strikethrough = msoNoStrike
+                            .UnderlineStyle = msoNoUnderline
+                            .Strike = msoNoStrike
                             .Subscript = msoFalse
                             .Superscript = msoFalse
-                            .Shadow = msoFalse
                         End With
                     Next r
                 End If
