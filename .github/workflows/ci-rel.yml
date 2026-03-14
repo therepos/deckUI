@@ -6,6 +6,7 @@ on:
       - src/pptm/deckUI.pptm
       - src/pptm/deckUI.ppam      
       - src/cmd/deckUIsetup.cmd
+  workflow_dispatch:
 jobs:
   release:
     runs-on: windows-latest
