@@ -1,141 +1,103 @@
 @echo off
 setlocal EnableExtensions
 
-:: Sanity: required files must be beside this cmd
-if not exist "%~dp0deckUI.ppam" (
-  echo Missing deckUI.ppam next to deckUIsetup.cmd
-  pause
-  exit /b 1
+:: deckUI Setup — one-click install/uninstall
+:: Copies deckUI.ppam to %APPDATA%\Microsoft\AddIns
+:: No admin rights needed. PowerPoint auto-discovers add-ins in this folder.
+
+set "ADDIN=deckUI.ppam"
+set "SRC=%~dp0%ADDIN%"
+set "DEST=%APPDATA%\Microsoft\AddIns"
+set "DST=%DEST%\%ADDIN%"
+
+echo.
+echo  ========================================
+echo    deckUI - PowerPoint Add-in Setup
+echo  ========================================
+echo.
+
+:: Check source file exists
+if not exist "%SRC%" (
+    echo  ERROR: %ADDIN% not found next to this setup file.
+    echo  Place %ADDIN% in the same folder as this script.
+    echo.
+    pause
+    exit /b 1
 )
 
-:: Extract embedded PowerShell payload
-set "PAYTAG=::PAYLOAD"
-for /f "delims=:" %%A in ('findstr /n /c:"%PAYTAG%" "%~f0"') do set /a LN=%%A+1
-set "TMPPS=%TEMP%\deckUI_setup_%RANDOM%.ps1"
-more +%LN% "%~f0" > "%TMPPS%"
+:: Check if already installed
+if exist "%DST%" goto :uninstall
 
-:: Pass our folder via ENV and PS param; run STA for Office COM if needed
-set "SETUP_DIR=%~dp0"
-powershell.exe -NoProfile -ExecutionPolicy Bypass -Sta -File "%TMPPS%" -SourceDirOverride "%~dp0"
-set "rc=%ERRORLEVEL%"
-del "%TMPPS%" >nul 2>&1
-if not "%rc%"=="0" (
-  echo.
-  echo Installer reported an error (code %rc%). See messages above.
-  pause
+:: ---- INSTALL ----
+:install
+
+:: Close PowerPoint if running
+tasklist /fi "imagename eq POWERPNT.EXE" 2>nul | find /i "POWERPNT.EXE" >nul
+if %errorlevel%==0 (
+    echo  PowerPoint is running. Please close it first.
+    echo.
+    pause
+    exit /b 1
 )
-endlocal
-exit /b %rc%
 
-::PAYLOAD
-param([string]$SourceDirOverride)
+:: Ensure target folder exists
+if not exist "%DEST%" mkdir "%DEST%"
 
-$ErrorActionPreference = 'Stop'
-$PSDefaultParameterValues['Out-File:Encoding'] = 'utf8'
-$Host.UI.RawUI.WindowTitle = 'deckUI setup'
+:: Copy
+copy /y "%SRC%" "%DST%" >nul
+if errorlevel 1 (
+    echo  ERROR: Failed to copy %ADDIN%.
+    echo.
+    pause
+    exit /b 1
+)
 
-<#
-PowerPoint Add-in Installer/Uninstaller (single file)
-- Copies deckUI.ppam into PowerPoint's AddIns folder:
-  %APPDATA%\Microsoft\AddIns
-- No C:\Apps, no Trusted Locations, no COM automation needed.
-- After install, enable in PowerPoint: File > Options > Add-Ins >
-  Manage: PowerPoint Add-ins > Go > check deckUI
-#>
+echo  Installed to: %DST%
+echo.
+echo  Next steps:
+echo    1. Open PowerPoint
+echo    2. File ^> Options ^> Add-Ins
+echo    3. At the bottom: Manage = "PowerPoint Add-ins" ^> Go
+echo    4. Check "deckUI" and click OK
+echo.
+echo  You only need to do this once. After that the
+echo  DeckUI tab will appear every time you open PowerPoint.
+echo.
+pause
+exit /b 0
 
-# ===== CONFIG =====
-$AddInsDir      = Join-Path $env:APPDATA 'Microsoft\AddIns'
-$TargetDir      = $AddInsDir
-$FilesToInstall = @('deckUI.ppam')
-$AddInFile      = 'deckUI.ppam'
-# ==================
+:: ---- UNINSTALL ----
+:uninstall
 
-# -------- Helpers --------
-function Get-ScriptDir {
-    if ($env:SETUP_DIR)                 { return $env:SETUP_DIR }
-    if ($SourceDirOverride)             { return $SourceDirOverride }
-    if ($PSScriptRoot)                  { return $PSScriptRoot }
-    if ($PSCommandPath)                 { return (Split-Path -Parent $PSCommandPath) }
-    if ($MyInvocation.MyCommand.Path)   { return (Split-Path -Parent $MyInvocation.MyCommand.Path) }
-    return (Get-Location).Path
-}
-$SourceDir = (Get-ScriptDir).TrimEnd('\') + '\'
+echo  deckUI is already installed at:
+echo    %DST%
+echo.
+set /p "ANS=  Uninstall? (Y/N): "
+if /i not "%ANS%"=="Y" (
+    echo  Cancelled.
+    echo.
+    pause
+    exit /b 0
+)
 
-function Ensure-Dir($p){
-    if (-not (Test-Path $p)) {
-        New-Item -ItemType Directory -Path $p -Force | Out-Null
-    }
-}
+:: Close PowerPoint if running
+tasklist /fi "imagename eq POWERPNT.EXE" 2>nul | find /i "POWERPNT.EXE" >nul
+if %errorlevel%==0 (
+    echo  PowerPoint is running. Please close it first.
+    echo.
+    pause
+    exit /b 1
+)
 
-function Status($msg,[scriptblock]$act,[switch]$Fatal){
-    $w = 40
-    Write-Host ($msg.PadRight($w)) -NoNewline
-    try{
-        & $act | Out-Null
-        Write-Host "Done" -ForegroundColor Green
-    }
-    catch{
-        Write-Host "Failed" -ForegroundColor Red
-        Write-Host ("  " + $_.Exception.Message) -ForegroundColor DarkRed
-        if($Fatal){ throw }
-    }
-}
+del /f "%DST%" >nul 2>&1
+if exist "%DST%" (
+    echo  ERROR: Could not remove %ADDIN%.
+    echo.
+    pause
+    exit /b 1
+)
 
-# Detection (file must exist in AddIns folder)
-function Detect-Installed {
-    $installed = @()
-
-    $addinsAddin = Join-Path $AddInsDir $AddInFile
-    if (Test-Path $addinsAddin) { $installed += $addinsAddin }
-
-    $installed | Select-Object -Unique
-}
-
-# Actions
-function Install-Addin {
-    Status "Installing add-in to AddIns folder" -Fatal {
-        Ensure-Dir $AddInsDir
-
-        foreach($f in $FilesToInstall){
-            $src = Join-Path $SourceDir $f
-            if (-not (Test-Path $src)) {
-                throw "Missing file '$f' in $SourceDir"
-            }
-            $dst = Join-Path $AddInsDir $f
-            Copy-Item $src $dst -Force
-            try { Unblock-File -Path $dst -ErrorAction SilentlyContinue } catch {}
-        }
-    }
-
-    Write-Host ""
-    Write-Host "To enable the add-in in PowerPoint:" -ForegroundColor Cyan
-    Write-Host "  1. Open PowerPoint"
-    Write-Host "  2. File > Options > Add-Ins"
-    Write-Host "  3. At the bottom, set 'Manage' to 'PowerPoint Add-ins' > Go"
-    Write-Host "  4. Click 'Add New...' and select deckUI.ppam"
-    Write-Host "     (or check the box if it already appears)"
-}
-
-function Uninstall-Addin {
-    Status "Removing add-in from AddIns folder" {
-        $p = Join-Path $AddInsDir $AddInFile
-        if (Test-Path $p) {
-            Remove-Item $p -Force -ErrorAction SilentlyContinue
-        }
-    }
-}
-
-# Main
-$paths = Detect-Installed
-if (-not $paths -or $paths.Count -eq 0) {
-    $ans = Read-Host "deckUI is NOT installed. Install now? (Y/N)"
-    if ($ans -match '^[Yy]') { Install-Addin }
-} else {
-    $ans = Read-Host ("deckUI is installed at: " + ($paths -join ', ') + ". Uninstall it? (Y/N)")
-    if ($ans -match '^[Yy]') { Uninstall-Addin }
-}
-
-Write-Host ""
-Write-Host "All done. You can close this window now." -ForegroundColor Yellow
-
-exit 0
+echo  deckUI uninstalled.
+echo.
+pause
+exit /b 0
