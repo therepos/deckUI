@@ -39,51 +39,47 @@ Private Sub InsertTableFormula(funcName As String)
     Dim tbl As Table
     Dim targetRow As Long
     Dim targetCol As Long
-    Dim r As Long
+    Dim r As Long, c As Long
     Dim cellText As String
+    Dim rawText As String
     Dim val As Double
     Dim total As Double
     Dim cnt As Long
     Dim finalVal As Double
-
+    Dim origText As String
+    Dim marker As String
+    
+    ' Format detection
+    Dim hasDecimal As Boolean
+    Dim hasComma As Boolean
+    Dim hasDollar As Boolean
+    
     Set sel = ActiveWindow.Selection
-
-    ' We need to find the active table and the cell the user is in.
-    ' PPT doesn't expose the "active cell" directly, so we look for
-    ' a text selection inside a table shape.
 
     If sel.Type <> ppSelectionText Then
         MsgBox "Please click inside a table cell, then run this command.", vbExclamation
         Exit Sub
     End If
 
-    ' Walk up to find the table shape
     Set shp = sel.ShapeRange(1)
 
     If Not shp.HasTable Then
-        ' The parent of the text frame might be a cell shape inside a table
-        ' Try the parent shape
-        On Error GoTo notTable
-        Set shp = shp.ParentGroup
-        On Error GoTo 0
-        If Not shp.HasTable Then GoTo notTable
+        MsgBox "Please place your cursor inside a table cell.", vbExclamation
+        Exit Sub
     End If
 
     Set tbl = shp.Table
 
-    ' Find which cell contains the selection by matching text range
-    Dim tr As TextRange
-    Set tr = sel.TextRange
+    ' Identify the active cell using a temporary marker
+    origText = sel.TextRange.Text
+    marker = Chr(1) & "DECKUI_MARKER" & Chr(2)
+    sel.TextRange.Text = marker
 
-    ' Determine cell position by iterating
     Dim found As Boolean
     found = False
     For r = 1 To tbl.Rows.Count
-        Dim c As Long
         For c = 1 To tbl.Columns.Count
-            If tbl.Cell(r, c).Shape.TextFrame.TextRange.Text = tr.Text Then
-                ' Heuristic: if the text matches, assume it's our cell
-                ' (works well when user clicks into a specific cell)
+            If tbl.Cell(r, c).Shape.TextFrame.TextRange.Text = marker Then
                 targetRow = r
                 targetCol = c
                 found = True
@@ -94,19 +90,30 @@ Private Sub InsertTableFormula(funcName As String)
     Next r
 
     If Not found Then
-        ' Fallback: use last row, last column with selection
-        MsgBox "Could not determine the active cell. " & _
-               "Please place your cursor in the target cell.", vbExclamation
+        sel.TextRange.Text = origText
+        MsgBox "Could not determine the active cell.", vbExclamation
         Exit Sub
     End If
 
-    ' Calculate from rows above the target
+    ' Restore original text before calculating
+    tbl.Cell(targetRow, targetCol).Shape.TextFrame.TextRange.Text = origText
+
+    ' Calculate from rows above and detect format
     total = 0
     cnt = 0
+    hasDecimal = False
+    hasComma = False
+    hasDollar = False
 
     For r = 1 To targetRow - 1
-        cellText = Trim$(tbl.Cell(r, targetCol).Shape.TextFrame.TextRange.Text)
-        cellText = CleanNumericText(cellText)
+        rawText = Trim$(tbl.Cell(r, targetCol).Shape.TextFrame.TextRange.Text)
+        
+        ' Detect formatting from raw text before cleaning
+        If InStr(rawText, ".") > 0 Then hasDecimal = True
+        If InStr(rawText, ",") > 0 Then hasComma = True
+        If InStr(rawText, "$") > 0 Then hasDollar = True
+        
+        cellText = CleanNumericText(rawText)
         If IsNumeric(cellText) And Len(cellText) > 0 Then
             val = CDbl(cellText)
             total = total + val
@@ -128,13 +135,28 @@ Private Sub InsertTableFormula(funcName As String)
             finalVal = cnt
     End Select
 
-    ' Write result into the target cell
-    tbl.Cell(targetRow, targetCol).Shape.TextFrame.TextRange.Text = Format(finalVal, "0.00")
+    ' Build format string based on detected format
+    Dim fmt As String
+    Dim prefix As String
+    
+    If hasComma And hasDecimal Then
+        fmt = "#,##0.00"
+    ElseIf hasComma Then
+        fmt = "#,##0"
+    ElseIf hasDecimal Then
+        fmt = "0.00"
+    Else
+        fmt = "0"
+    End If
+    
+    If hasDollar Then
+        prefix = "$"
+    Else
+        prefix = ""
+    End If
 
-    Exit Sub
-
-notTable:
-    MsgBox "Please place your cursor inside a table cell.", vbExclamation
+    ' Write formatted result
+    tbl.Cell(targetRow, targetCol).Shape.TextFrame.TextRange.Text = FormatValue(finalVal, fmt, prefix)
 
 End Sub
 
@@ -291,4 +313,17 @@ Private Function CleanNumericText(s As String) As String
         t = Replace(t, ")", "")
     End If
     CleanNumericText = Trim$(t)
+End Function
+
+Private Function FormatValue(val As Double, fmt As String, prefix As String) As String
+    Dim result As String
+    If val < 0 Then
+        result = "(" & Format(Abs(val), fmt) & ")"
+    Else
+        result = Format(val, fmt)
+    End If
+    If Len(prefix) > 0 Then
+        result = prefix & " " & result
+    End If
+    FormatValue = result
 End Function

@@ -205,3 +205,5 @@ Private Sub DoReplace(tf As TextFrame, usWord As String, ukWord As String)
     Loop
 
 End Sub
+
+

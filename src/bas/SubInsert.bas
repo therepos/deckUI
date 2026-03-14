@@ -55,7 +55,7 @@ Private Sub InsertBase64Img(base64String As String, Optional widthCm As Double =
     Set xml = CreateObject("MSXML2.DOMDocument")
     Set node = xml.createElement("b64")
     node.DataType = "bin.base64"
-    node.text = base64String
+    node.Text = base64String
     fileData = node.nodeTypedValue
 
     ' Write to temp file
@@ -133,7 +133,7 @@ Public Sub ConvertImageToBase64()
         node.nodeTypedValue = fileData
 
         ' Strip all whitespace
-        base64 = node.text
+        base64 = node.Text
         base64 = Replace(base64, vbCrLf, "")
         base64 = Replace(base64, vbCr, "")
         base64 = Replace(base64, vbLf, "")
@@ -159,3 +159,5 @@ Public Sub ConvertImageToBase64()
     End If
 
 End Sub
+
+

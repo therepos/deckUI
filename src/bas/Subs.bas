@@ -2,108 +2,158 @@ Option Explicit
 
 ' =============================================================================
 ' MODULE: Subs
-' Purpose: General formatting operations for PowerPoint presentations
-'          Works across all slides, shapes, and text frames.
+' Purpose: General formatting operations for PowerPoint presentations.
+'          Works across ALL text in every slide — regular shapes, tables,
+'          grouped shapes, and placeholders.
 '
-' Contents:
-'   - DeckFontSizeDecrease / DeckFontSizeIncrease
-'   - DeckSpacingSingle
-'   - RunPresetFontArial / RunPresetFontEY / RunPresetFontTimes /
-'     RunPresetFontCalibri / RunPresetFontRepeat
-'   - SelFormatNumDecimal / SelFormatNumNoDecimal / SelFormatNumDollar /
-'     SelFormatNumRepeat
-'   - SelFormatDateShort / SelFormatDateLong / SelFormatDateRepeat
+' Uses TextFrame / TextRange (not TextFrame2) for reliability.
+' A shared recursive helper (ProcessShapeForEachRun / ProcessShapeFont)
+' ensures tables and groups are never skipped.
 ' =============================================================================
 
 
 ' ===== FONT SIZE =============================================================
 
 Sub DeckFontSizeDecrease()
-
     Dim sld As Slide
-    Dim shp As Shape
-    Dim tf As TextFrame2
-    Dim rng As TextRange2
-    Dim para As TextRange2
-    Dim r As Long
-
-    On Error Resume Next
     For Each sld In ActivePresentation.Slides
+        Dim shp As Shape
         For Each shp In sld.Shapes
-            If shp.HasTextFrame Then
-                Set tf = shp.TextFrame2
-                If tf.HasText Then
-                    For r = 1 To tf.TextRange.Runs.Count
-                        Set rng = tf.TextRange.Runs(r)
-                        If rng.Font.Size > 1 Then
-                            rng.Font.Size = rng.Font.Size - 1
-                        End If
-                    Next r
-                End If
-            End If
+            AdjustShapeFontSize shp, -1
         Next shp
     Next sld
-    On Error GoTo 0
-
 End Sub
 
 Sub DeckFontSizeIncrease()
-
     Dim sld As Slide
-    Dim shp As Shape
-    Dim tf As TextFrame2
-    Dim rng As TextRange2
-    Dim r As Long
-
-    On Error Resume Next
     For Each sld In ActivePresentation.Slides
+        Dim shp As Shape
         For Each shp In sld.Shapes
-            If shp.HasTextFrame Then
-                Set tf = shp.TextFrame2
-                If tf.HasText Then
-                    For r = 1 To tf.TextRange.Runs.Count
-                        Set rng = tf.TextRange.Runs(r)
-                        rng.Font.Size = rng.Font.Size + 1
-                    Next r
-                End If
-            End If
+            AdjustShapeFontSize shp, 1
         Next shp
     Next sld
-    On Error GoTo 0
+End Sub
 
+' --- Recursive font-size adjuster ---
+Private Sub AdjustShapeFontSize(shp As Shape, delta As Long)
+    Dim tr As TextRange
+    Dim run As TextRange
+    Dim i As Long
+
+    On Error Resume Next
+
+    ' --- Group: recurse into each child ---
+    If shp.Type = msoGroup Then
+        Dim child As Shape
+        For Each child In shp.GroupItems
+            AdjustShapeFontSize child, delta
+        Next child
+        Exit Sub
+    End If
+
+    ' --- Table: iterate every cell ---
+    If shp.HasTable Then
+        Dim tbl As Table
+        Dim r As Long, c As Long
+        Set tbl = shp.Table
+        For r = 1 To tbl.Rows.Count
+            For c = 1 To tbl.Columns.Count
+                Set tr = tbl.Cell(r, c).Shape.TextFrame.TextRange
+                For i = 1 To tr.Runs.Count
+                    Set run = tr.Runs(i)
+                    If run.Font.Size + delta >= 1 Then
+                        run.Font.Size = run.Font.Size + delta
+                    End If
+                Next i
+            Next c
+        Next r
+        Exit Sub
+    End If
+
+    ' --- Regular text frame ---
+    If shp.HasTextFrame Then
+        If shp.TextFrame.HasText Then
+            Set tr = shp.TextFrame.TextRange
+            For i = 1 To tr.Runs.Count
+                Set run = tr.Runs(i)
+                If run.Font.Size + delta >= 1 Then
+                    run.Font.Size = run.Font.Size + delta
+                End If
+            Next i
+        End If
+    End If
+
+    On Error GoTo 0
 End Sub
 
 
 ' ===== SPACING ===============================================================
 
 Sub DeckSpacingSingle()
-
     Dim sld As Slide
-    Dim shp As Shape
-    Dim tf As TextFrame2
-    Dim para As TextRange2
-    Dim p As Long
-
-    On Error Resume Next
     For Each sld In ActivePresentation.Slides
+        Dim shp As Shape
         For Each shp In sld.Shapes
-            If shp.HasTextFrame Then
-                Set tf = shp.TextFrame2
-                If tf.HasText Then
-                    For p = 1 To tf.TextRange.Paragraphs.Count
-                        Set para = tf.TextRange.Paragraphs(p)
-                        With para.ParagraphFormat
-                            .SpaceBefore = 0
-                            .SpaceAfter = 0
-                            .SpaceWithin = 1
-                        End With
-                    Next p
-                End If
-            End If
+            ApplyShapeSingleSpacing shp
         Next shp
     Next sld
-    On Error GoTo 0
+End Sub
 
+Private Sub ApplyShapeSingleSpacing(shp As Shape)
+    Dim tr As TextRange
+
+    On Error Resume Next
+
+    ' --- Group ---
+    If shp.Type = msoGroup Then
+        Dim child As Shape
+        For Each child In shp.GroupItems
+            ApplyShapeSingleSpacing child
+        Next child
+        Exit Sub
+    End If
+
+    ' --- Table ---
+    If shp.HasTable Then
+        Dim tbl As Table
+        Dim r As Long, c As Long
+        Set tbl = shp.Table
+        For r = 1 To tbl.Rows.Count
+            For c = 1 To tbl.Columns.Count
+                Err.Clear
+                Set tr = tbl.Cell(r, c).Shape.TextFrame.TextRange
+                With tr.ParagraphFormat
+                    .LineRuleBefore = msoFalse
+                    .SpaceBefore = 0
+                    .LineRuleAfter = msoFalse
+                    .SpaceAfter = 0
+                    .LineRuleWithin = msoFalse
+                    .SpaceWithin = 0
+                    .LineRuleWithin = msoTrue
+                    .SpaceWithin = 1
+                End With
+            Next c
+        Next r
+        Exit Sub
+    End If
+
+    ' --- Regular text frame ---
+    If shp.HasTextFrame Then
+        Err.Clear
+        Set tr = shp.TextFrame.TextRange
+        With tr.ParagraphFormat
+            .LineRuleBefore = msoFalse
+            .SpaceBefore = 0
+            .LineRuleAfter = msoFalse
+            .SpaceAfter = 0
+            .LineRuleWithin = msoFalse
+            .SpaceWithin = 0
+            .LineRuleWithin = msoTrue
+            .SpaceWithin = 1
+        End With
+    End If
+
+    On Error GoTo 0
 End Sub
 
 
@@ -134,26 +184,50 @@ Public Sub RunPresetFontRepeat()
 End Sub
 
 Private Sub ApplyFontToDeck(f As String)
-
     Dim sld As Slide
-    Dim shp As Shape
-    Dim tf As TextFrame2
-
-    On Error Resume Next
     For Each sld In ActivePresentation.Slides
+        Dim shp As Shape
         For Each shp In sld.Shapes
-            If shp.HasTextFrame Then
-                Set tf = shp.TextFrame2
-                If tf.HasText Then
-                    tf.TextRange.Font.Name = f
-                End If
-            End If
+            ApplyShapeFont shp, f
         Next shp
     Next sld
-    On Error GoTo 0
-
     MsgBox "Font applied: " & f, vbInformation, "Font"
+End Sub
 
+' --- Recursive font-name applier ---
+Private Sub ApplyShapeFont(shp As Shape, f As String)
+    On Error Resume Next
+
+    ' --- Group ---
+    If shp.Type = msoGroup Then
+        Dim child As Shape
+        For Each child In shp.GroupItems
+            ApplyShapeFont child, f
+        Next child
+        Exit Sub
+    End If
+
+    ' --- Table ---
+    If shp.HasTable Then
+        Dim tbl As Table
+        Dim r As Long, c As Long
+        Set tbl = shp.Table
+        For r = 1 To tbl.Rows.Count
+            For c = 1 To tbl.Columns.Count
+                tbl.Cell(r, c).Shape.TextFrame.TextRange.Font.Name = f
+            Next c
+        Next r
+        Exit Sub
+    End If
+
+    ' --- Regular text frame ---
+    If shp.HasTextFrame Then
+        If shp.TextFrame.HasText Then
+            shp.TextFrame.TextRange.Font.Name = f
+        End If
+    End If
+
+    On Error GoTo 0
 End Sub
 
 
@@ -321,8 +395,6 @@ End Function
 
 
 ' ===== PREFERENCE STORAGE ====================================================
-' Uses Windows registry (HKEY_CURRENT_USER — no admin rights needed)
-' so preferences persist across all presentations for the user.
 
 Private Sub SavePref(key As String, val As String)
     SaveSetting "DeckUI", "Preferences", key, val
@@ -331,3 +403,5 @@ End Sub
 Private Function GetPref(key As String, defaultVal As String) As String
     GetPref = GetSetting("DeckUI", "Preferences", key, defaultVal)
 End Function
+
+

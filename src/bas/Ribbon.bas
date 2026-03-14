@@ -7,10 +7,11 @@ End Sub
 Public Sub RunByName(control As IRibbonControl)
     Dim macro As String
     macro = control.Tag
-    If Len(macro) = 0 Then macro = control.ID
+    If Len(macro) = 0 Then macro = control.Id
     On Error GoTo errh
-    Application.Run macro
+    Application.run macro
     Exit Sub
 errh:
     MsgBox "Macro not found: " & macro, vbExclamation
 End Sub
+
