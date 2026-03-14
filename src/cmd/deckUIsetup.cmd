@@ -11,7 +11,7 @@ set "ADDIN_NAME=deckUI"
 set "DEST=%APPDATA%\Microsoft\AddIns"
 set "DST=%DEST%\%ADDIN%"
 set "REGKEY=HKCU\Software\Microsoft\Office\16.0\PowerPoint\AddIns\%ADDIN_NAME%"
-set "DOWNLOAD_URL=https://github.com/therepos/deckUI/blob/main/src/cmd/deckUI.ppam?raw=true"
+set "DOWNLOAD_URL=https://raw.githubusercontent.com/therepos/deckUI/refs/heads/main/src/cmd/deckUI.ppam"
 
 echo.
 echo  ========================================
@@ -116,7 +116,7 @@ exit /b 0
 
 :download
 if not exist "%DEST%" mkdir "%DEST%"
-powershell -NoProfile -Command "try { [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; Invoke-WebRequest -Uri '%DOWNLOAD_URL%' -OutFile '%DST%' -UseBasicParsing; exit 0 } catch { Write-Host '  ERROR:' $_.Exception.Message; exit 1 }"
+powershell -NoProfile -Command "$ProgressPreference='SilentlyContinue'; [Net.ServicePointManager]::SecurityProtocol=[Net.SecurityProtocolType]::Tls12 -bor [Net.SecurityProtocolType]::Tls13; Invoke-WebRequest -Uri '%DOWNLOAD_URL%' -OutFile '%DST%'; if(!(Test-Path '%DST%')){exit 1}"
 if errorlevel 1 (
     echo  Download failed. Check your internet connection.
     echo.
