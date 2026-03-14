@@ -11,7 +11,7 @@ set "ADDIN_NAME=deckUI"
 set "DEST=%APPDATA%\Microsoft\AddIns"
 set "DST=%DEST%\%ADDIN%"
 set "REGKEY=HKCU\Software\Microsoft\Office\16.0\PowerPoint\AddIns\%ADDIN_NAME%"
-set "DOWNLOAD_URL=https://raw.githubusercontent.com/therepos/deckUI/refs/heads/main/src/cmd/deckUI.ppam"
+set "DOWNLOAD_URL=https://raw.githubusercontent.com/therepos/deckUI/refs/heads/main/src/ppt/deckUI.ppam"
 
 echo.
 echo  ========================================
