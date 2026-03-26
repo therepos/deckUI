@@ -2832,6 +2832,311 @@ Private Sub DoReplace(tf As TextFrame, usWord As String, ukWord As String)
 End Sub
 ```
 
+## Module `SubCopy`
+
+### `FreezeAllSlides`
+
+```vbnet
+Public Sub FreezeAllSlides()
+    Dim sld As Slide
+    Dim total As Long
+    total = ActivePresentation.slides.Count
+    
+    If total = 0 Then
+        MsgBox "No slides found.", vbExclamation
+        Exit Sub
+    End If
+    
+    Dim i As Long
+    For i = 1 To total
+        Set sld = ActivePresentation.slides(i)
+        FreezeSlide sld
+        DoEvents
+    Next i
+    
+    MsgBox "Done! Colors frozen on all " & total & " slides." & vbCrLf & _
+           "You can now safely copy them to any deck.", vbInformation
+End Sub
+```
+
+### `FreezeSelectedSlides`
+
+```vbnet
+Public Sub FreezeSelectedSlides()
+    On Error GoTo NoSelection
+    
+    Dim sel As SlideRange
+    Set sel = ActiveWindow.Selection.SlideRange
+    
+    If sel.Count = 0 Then
+        MsgBox "No slides selected.", vbExclamation
+        Exit Sub
+    End If
+    
+    Dim i As Long
+    For i = 1 To sel.Count
+        FreezeSlide sel(i)
+        DoEvents
+    Next i
+    
+    MsgBox "Done! Colors frozen on " & sel.Count & " selected slide(s).", vbInformation
+    Exit Sub
+    
+NoSelection:
+    MsgBox "Please select one or more slides in the slide panel first.", vbExclamation
+End Sub
+```
+
+### `FreezeSlide`
+
+```vbnet
+Private Sub FreezeSlide(sld As Slide)
+    ' Freeze slide background
+    FreezeBackground sld
+    
+    ' Freeze all shapes
+    Dim shp As Shape
+    For Each shp In sld.Shapes
+        FreezeShape shp
+    Next shp
+End Sub
+```
+
+### `FreezeBackground`
+
+```vbnet
+Private Sub FreezeBackground(sld As Slide)
+    On Error Resume Next
+    With sld.Background.fill
+        If .Type = msoFillSolid Then
+            FreezeColorFormat .ForeColor
+        ElseIf .Type = msoFillGradient Then
+            FreezeGradient .ForeColor, .BackColor
+            FreezeGradientStops sld.Background.fill
+        End If
+    End With
+    On Error GoTo 0
+End Sub
+```
+
+### `FreezeShape`
+
+```vbnet
+Private Sub FreezeShape(shp As Shape)
+    On Error Resume Next
+    
+    ' Handle grouped shapes recursively
+    If shp.Type = msoGroup Then
+        Dim subShp As Shape
+        For Each subShp In shp.GroupItems
+            FreezeShape subShp
+        Next subShp
+        Exit Sub
+    End If
+    
+    ' Handle tables
+    If shp.HasTable Then
+        FreezeTable shp.Table
+        Exit Sub
+    End If
+    
+    ' Handle charts
+    If shp.HasChart Then
+        FreezeChart shp.Chart
+        Exit Sub
+    End If
+    
+    ' Standard shape: fill, line, text
+    FreezeFill shp
+    FreezeLine shp
+    
+    If shp.HasTextFrame Then
+        FreezeTextFrame shp.TextFrame
+    End If
+    
+    On Error GoTo 0
+End Sub
+```
+
+### `FreezeFill`
+
+```vbnet
+Private Sub FreezeFill(shp As Shape)
+    On Error Resume Next
+    With shp.fill
+        Select Case .Type
+            Case msoFillSolid
+                FreezeColorFormat .ForeColor
+            Case msoFillGradient
+                FreezeGradient .ForeColor, .BackColor
+                FreezeGradientStops shp.fill
+            Case msoFillPatterned
+                FreezeColorFormat .ForeColor
+                FreezeColorFormat .BackColor
+        End Select
+    End With
+    On Error GoTo 0
+End Sub
+```
+
+### `FreezeGradientStops`
+
+```vbnet
+Private Sub FreezeGradientStops(fill As FillFormat)
+    On Error Resume Next
+    Dim gs As GradientStop
+    Dim i As Long
+    For i = 1 To fill.GradientStops.Count
+        Set gs = fill.GradientStops(i)
+        FreezeColorFormat gs.Color
+    Next i
+    On Error GoTo 0
+End Sub
+```
+
+### `FreezeGradient`
+
+```vbnet
+Private Sub FreezeGradient(fc As ColorFormat, bc As ColorFormat)
+    On Error Resume Next
+    FreezeColorFormat fc
+    FreezeColorFormat bc
+    On Error GoTo 0
+End Sub
+```
+
+### `FreezeLine`
+
+```vbnet
+Private Sub FreezeLine(shp As Shape)
+    On Error Resume Next
+    If shp.Line.Visible = msoTrue Then
+        FreezeColorFormat shp.Line.ForeColor
+        FreezeColorFormat shp.Line.BackColor
+    End If
+    On Error GoTo 0
+End Sub
+```
+
+### `FreezeTextFrame`
+
+```vbnet
+Private Sub FreezeTextFrame(tf As TextFrame)
+    On Error Resume Next
+    If Not tf.HasText Then Exit Sub
+    
+    Dim tr As TextRange
+    Set tr = tf.TextRange
+    
+    ' Freeze each run individually to preserve per-run formatting
+    Dim i As Long
+    For i = 1 To tr.Runs.Count
+        FreezeColorFormat tr.Runs(i).Font.Color
+    Next i
+    
+    ' Also freeze any paragraph-level bullet colors
+    Dim para As TextRange
+    For i = 1 To tr.Paragraphs.Count
+        Set para = tr.Paragraphs(i)
+        ' Bullet color
+        If para.ParagraphFormat.Bullet.Type <> ppBulletNone Then
+            FreezeColorFormat para.ParagraphFormat.Bullet.Font.Color
+        End If
+    Next i
+    
+    On Error GoTo 0
+End Sub
+```
+
+### `FreezeTable`
+
+```vbnet
+Private Sub FreezeTable(tbl As Table)
+    On Error Resume Next
+    Dim r As Long, c As Long
+    
+    For r = 1 To tbl.Rows.Count
+        For c = 1 To tbl.Columns.Count
+            With tbl.Cell(r, c)
+                ' Cell fill
+                If .Shape.fill.Type = msoFillSolid Then
+                    FreezeColorFormat .Shape.fill.ForeColor
+                End If
+                
+                ' Cell borders
+                FreezeBorder .Borders(ppBorderTop)
+                FreezeBorder .Borders(ppBorderBottom)
+                FreezeBorder .Borders(ppBorderLeft)
+                FreezeBorder .Borders(ppBorderRight)
+                
+                ' Cell text
+                If .Shape.HasTextFrame Then
+                    FreezeTextFrame .Shape.TextFrame
+                End If
+            End With
+        Next c
+    Next r
+    On Error GoTo 0
+End Sub
+```
+
+### `FreezeBorder`
+
+```vbnet
+Private Sub FreezeBorder(brd As LineFormat)
+    On Error Resume Next
+    If brd.Visible = msoTrue Then
+        FreezeColorFormat brd.ForeColor
+    End If
+    On Error GoTo 0
+End Sub
+```
+
+### `FreezeChart`
+
+```vbnet
+Private Sub FreezeChart(cht As Chart)
+    On Error Resume Next
+    Dim i As Long
+    
+    ' Series fills and lines
+    For i = 1 To cht.SeriesCollection.Count
+        With cht.SeriesCollection(i)
+            If .Format.fill.Type = msoFillSolid Then
+                FreezeColorFormat .Format.fill.ForeColor
+            End If
+            If .Format.Line.Visible = msoTrue Then
+                FreezeColorFormat .Format.Line.ForeColor
+            End If
+        End With
+    Next i
+    
+    ' Chart title
+    If cht.HasTitle Then
+        FreezeColorFormat cht.ChartTitle.Format.TextFrame2.TextRange.Font.fill.ForeColor
+    End If
+    
+    On Error GoTo 0
+End Sub
+```
+
+### `FreezeColorFormat`
+
+```vbnet
+Private Sub FreezeColorFormat(cf As ColorFormat)
+    On Error Resume Next
+    
+    ' Only convert if it's a theme/scheme color
+    If cf.Type = msoColorTypeScheme Or cf.ObjectThemeColor <> msoNotThemeColor Then
+        Dim rgbVal As Long
+        rgbVal = cf.RGB  ' Read the currently rendered color
+        cf.RGB = rgbVal  ' Write it back as a hard-coded value
+    End If
+    
+    On Error GoTo 0
+End Sub
+```
+
 ## Module `SubInsert`
 
 ### `CmToPt`
@@ -3043,10 +3348,10 @@ End Function
 
 ```vbnet
 Public Sub ResetAll()
-    ResetFormat
-    ResetObject
-    ResetTables
-    ResetHyperlinks
+    ResetFormat ActivePresentation.slides
+    ResetObject ActivePresentation.slides
+    ResetTables ActivePresentation.slides
+    ResetHyperlinks ActivePresentation.slides
     MsgBox "Reset complete:" & vbCrLf & vbCrLf & _
            "Formatting, Objects, Tables, Hyperlinks (All)", _
            vbInformation, "Reset"
@@ -3057,8 +3362,8 @@ End Sub
 
 ```vbnet
 Public Sub RunResetFormat()
-    ResetFormat
-    MsgBox "Reset complete: Formatting", vbInformation, "Reset"
+    ResetFormat ActivePresentation.slides
+    MsgBox "Reset complete: Formatting (All Slides)", vbInformation, "Reset"
 End Sub
 ```
 
@@ -3066,8 +3371,8 @@ End Sub
 
 ```vbnet
 Public Sub RunResetObject()
-    ResetObject
-    MsgBox "Reset complete: Objects", vbInformation, "Reset"
+    ResetObject ActivePresentation.slides
+    MsgBox "Reset complete: Objects (All Slides)", vbInformation, "Reset"
 End Sub
 ```
 
@@ -3075,8 +3380,8 @@ End Sub
 
 ```vbnet
 Public Sub RunResetTables()
-    ResetTables
-    MsgBox "Reset complete: Tables", vbInformation, "Reset"
+    ResetTables ActivePresentation.slides
+    MsgBox "Reset complete: Tables (All Slides)", vbInformation, "Reset"
 End Sub
 ```
 
@@ -3084,30 +3389,85 @@ End Sub
 
 ```vbnet
 Public Sub RunResetHyperlinks()
-    ResetHyperlinks
-    MsgBox "Reset complete: Hyperlinks", vbInformation, "Reset"
+    ResetHyperlinks ActivePresentation.slides
+    MsgBox "Reset complete: Hyperlinks (All Slides)", vbInformation, "Reset"
 End Sub
+```
+
+### `SelResetFormat`
+
+```vbnet
+Public Sub SelResetFormat()
+    Dim sel As SlideRange
+    If Not GetSelectedSlides(sel) Then Exit Sub
+    ResetFormat sel
+    MsgBox "Reset complete: Formatting (" & sel.Count & " slide(s))", vbInformation, "Reset"
+End Sub
+```
+
+### `SelResetObject`
+
+```vbnet
+Public Sub SelResetObject()
+    Dim sel As SlideRange
+    If Not GetSelectedSlides(sel) Then Exit Sub
+    ResetObject sel
+    MsgBox "Reset complete: Objects (" & sel.Count & " slide(s))", vbInformation, "Reset"
+End Sub
+```
+
+### `SelResetTables`
+
+```vbnet
+Public Sub SelResetTables()
+    Dim sel As SlideRange
+    If Not GetSelectedSlides(sel) Then Exit Sub
+    ResetTables sel
+    MsgBox "Reset complete: Tables (" & sel.Count & " slide(s))", vbInformation, "Reset"
+End Sub
+```
+
+### `SelResetHyperlinks`
+
+```vbnet
+Public Sub SelResetHyperlinks()
+    Dim sel As SlideRange
+    If Not GetSelectedSlides(sel) Then Exit Sub
+    ResetHyperlinks sel
+    MsgBox "Reset complete: Hyperlinks (" & sel.Count & " slide(s))", vbInformation, "Reset"
+End Sub
+```
+
+### `GetSelectedSlides`
+
+```vbnet
+Private Function GetSelectedSlides(ByRef sel As SlideRange) As Boolean
+    On Error GoTo NoSelection
+    Set sel = ActiveWindow.Selection.SlideRange
+    If sel.Count = 0 Then GoTo NoSelection
+    GetSelectedSlides = True
+    Exit Function
+NoSelection:
+    MsgBox "Please select one or more slides first.", vbExclamation, "Reset"
+    GetSelectedSlides = False
+End Function
 ```
 
 ### `ResetFormat`
 
 ```vbnet
-Private Sub ResetFormat()
-' Clears all direct character formatting from every text frame
-' in every shape on every slide, reverting to the slide-master style.
-
+Private Sub ResetFormat(slides As Object)
     Dim sld As Slide
     Dim shp As Shape
     Dim tf As TextFrame2
     Dim r As Long
 
     On Error Resume Next
-    For Each sld In ActivePresentation.Slides
+    For Each sld In slides
         For Each shp In sld.Shapes
             If shp.HasTextFrame Then
                 Set tf = shp.TextFrame2
                 If tf.HasText Then
-                    ' Reset each run to inherit from theme/master
                     For r = 1 To tf.TextRange.Runs.Count
                         With tf.TextRange.Runs(r).Font
                             .Bold = msoFalse
@@ -3123,21 +3483,18 @@ Private Sub ResetFormat()
         Next shp
     Next sld
     On Error GoTo 0
-
 End Sub
 ```
 
 ### `ResetObject`
 
 ```vbnet
-Private Sub ResetObject()
-' Resets all pictures / inline shapes to their original size.
-
+Private Sub ResetObject(slides As Object)
     Dim sld As Slide
     Dim shp As Shape
 
     On Error Resume Next
-    For Each sld In ActivePresentation.Slides
+    For Each sld In slides
         For Each shp In sld.Shapes
             If shp.Type = msoPicture Or shp.Type = msoLinkedPicture Then
                 shp.ScaleHeight 1, msoTrue
@@ -3146,16 +3503,13 @@ Private Sub ResetObject()
         Next shp
     Next sld
     On Error GoTo 0
-
 End Sub
 ```
 
 ### `ResetTables`
 
 ```vbnet
-Private Sub ResetTables()
-' Resets table cell padding and applies thin borders to all tables.
-
+Private Sub ResetTables(slides As Object)
     Dim sld As Slide
     Dim shp As Shape
     Dim tbl As Table
@@ -3163,7 +3517,7 @@ Private Sub ResetTables()
     Dim cel As Cell
 
     On Error Resume Next
-    For Each sld In ActivePresentation.Slides
+    For Each sld In slides
         For Each shp In sld.Shapes
             If shp.HasTable Then
                 Set tbl = shp.Table
@@ -3176,7 +3530,6 @@ Private Sub ResetTables()
                             .MarginLeft = CmToPt(0.19)
                             .MarginRight = CmToPt(0.19)
                         End With
-                        ' Borders
                         Dim bdr As Long
                         For bdr = ppBorderTop To ppBorderDiagonalUp
                             With cel.Borders(bdr)
@@ -3196,38 +3549,31 @@ Private Sub ResetTables()
         Next shp
     Next sld
     On Error GoTo 0
-
 End Sub
 ```
 
 ### `ResetHyperlinks`
 
 ```vbnet
-Private Sub ResetHyperlinks()
-' Removes all hyperlinks from the active presentation.
-
+Private Sub ResetHyperlinks(slides As Object)
     Dim sld As Slide
     Dim shp As Shape
     Dim tf As TextFrame
     Dim tr As TextRange
-    Dim hl As Hyperlink
     Dim i As Long
 
     On Error Resume Next
-    For Each sld In ActivePresentation.Slides
-        ' Shape-level hyperlinks (click actions)
+    For Each sld In slides
         For Each shp In sld.Shapes
             If shp.ActionSettings(ppMouseClick).Hyperlink.Address <> "" Then
                 shp.ActionSettings(ppMouseClick).Hyperlink.Address = ""
                 shp.ActionSettings(ppMouseClick).Hyperlink.SubAddress = ""
             End If
 
-            ' Text-level hyperlinks
             If shp.HasTextFrame Then
                 Set tf = shp.TextFrame
                 If tf.HasText Then
                     Set tr = tf.TextRange
-                    ' Walk hyperlinks in reverse to avoid index issues
                     For i = tr.ActionSettings.Count To 1 Step -1
                         tr.ActionSettings(i).Hyperlink.Address = ""
                         tr.ActionSettings(i).Hyperlink.SubAddress = ""
@@ -3237,7 +3583,6 @@ Private Sub ResetHyperlinks()
         Next shp
     Next sld
     On Error GoTo 0
-
 End Sub
 ```
 
@@ -3590,7 +3935,7 @@ End Function
 ```vbnet
 Sub DeckFontSizeDecrease()
     Dim sld As Slide
-    For Each sld In ActivePresentation.Slides
+    For Each sld In ActivePresentation.slides
         Dim shp As Shape
         For Each shp In sld.Shapes
             AdjustShapeFontSize shp, -1
@@ -3604,7 +3949,7 @@ End Sub
 ```vbnet
 Sub DeckFontSizeIncrease()
     Dim sld As Slide
-    For Each sld In ActivePresentation.Slides
+    For Each sld In ActivePresentation.slides
         Dim shp As Shape
         For Each shp In sld.Shapes
             AdjustShapeFontSize shp, 1
@@ -3673,7 +4018,7 @@ End Sub
 ```vbnet
 Sub DeckSpacingSingle()
     Dim sld As Slide
-    For Each sld In ActivePresentation.Slides
+    For Each sld In ActivePresentation.slides
         Dim shp As Shape
         For Each shp In sld.Shapes
             ApplyShapeSingleSpacing shp
@@ -3792,7 +4137,7 @@ End Sub
 ```vbnet
 Private Sub ApplyFontToDeck(f As String)
     Dim sld As Slide
-    For Each sld In ActivePresentation.Slides
+    For Each sld In ActivePresentation.slides
         Dim shp As Shape
         For Each shp In sld.Shapes
             ApplyShapeFont shp, f
@@ -3885,7 +4230,6 @@ End Sub
 
 ```vbnet
 Private Sub FormatSelectedNumbers(fmt As String, prefix As String)
-
     Dim sel As Selection
     Dim tr As TextRange
     Dim cellText As String
@@ -3893,23 +4237,41 @@ Private Sub FormatSelectedNumbers(fmt As String, prefix As String)
 
     Set sel = ActiveWindow.Selection
 
-    ' --- Case 1: Text selected in a shape or table cell ---
+    ' --- Case 1: Text selected (includes multi-cell table selection) ---
     If sel.Type = ppSelectionText Then
-        Set tr = sel.TextRange
-        cellText = CleanNumericText(tr.Text)
-        If IsNumeric(cellText) And Len(cellText) > 0 Then
-            val = CDbl(cellText)
-            tr.Text = FormatValue(val, fmt, prefix)
+        ' Check if we're inside a table
+        If sel.ShapeRange(1).HasTable Then
+            Dim tbl As Table
+            Set tbl = sel.ShapeRange(1).Table
+            Dim r As Long, c As Long
+            For r = 1 To tbl.Rows.Count
+                For c = 1 To tbl.Columns.Count
+                    If tbl.Cell(r, c).Selected Then
+                        Set tr = tbl.Cell(r, c).Shape.TextFrame.TextRange
+                        cellText = CleanNumericText(tr.Text)
+                        If IsNumeric(cellText) And Len(cellText) > 0 Then
+                            val = CDbl(cellText)
+                            tr.Text = FormatValue(val, fmt, prefix)
+                            tr.ParagraphFormat.Alignment = ppAlignRight
+                        End If
+                    End If
+                Next c
+            Next r
+        Else
+            ' Regular text box selection
+            Set tr = sel.TextRange
+            cellText = CleanNumericText(tr.Text)
+            If IsNumeric(cellText) And Len(cellText) > 0 Then
+                val = CDbl(cellText)
+                tr.Text = FormatValue(val, fmt, prefix)
+            End If
         End If
         Exit Sub
     End If
 
-    ' --- Case 2: A table shape is selected — format all cells ---
+    ' --- Case 2: Entire table shape selected  format all cells ---
     If sel.Type = ppSelectionShapes Then
         Dim shp As Shape
-        Dim tbl As Table
-        Dim r As Long, c As Long
-
         For Each shp In sel.ShapeRange
             If shp.HasTable Then
                 Set tbl = shp.Table
@@ -3927,7 +4289,6 @@ Private Sub FormatSelectedNumbers(fmt As String, prefix As String)
             End If
         Next shp
     End If
-
 End Sub
 ```
 
@@ -3977,7 +4338,7 @@ Private Sub FormatSelectedDates(fmt As String)
         Exit Sub
     End If
 
-    ' Table shape selected — format all cells
+    ' Table shape selected  format all cells
     If sel.Type = ppSelectionShapes Then
         Dim shp As Shape
         Dim tbl As Table
