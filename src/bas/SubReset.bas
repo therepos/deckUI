@@ -1,3 +1,4 @@
+Attribute VB_Name = "SubReset"
 Option Explicit
 
 ' 1 cm = 28.3464567 points (PPT has no built-in CentimetersToPoints)
@@ -11,57 +12,103 @@ End Function
 ' Each Public Sub is called directly from a ribbon menu button.
 ' =============================================================================
 
+' -----------------------------------------------------------------------------
+' DECK-WIDE (all slides)
+' -----------------------------------------------------------------------------
+
 Public Sub ResetAll()
-    ResetFormat
-    ResetObject
-    ResetTables
-    ResetHyperlinks
+    ResetFormat ActivePresentation.slides
+    ResetObject ActivePresentation.slides
+    ResetTables ActivePresentation.slides
+    ResetHyperlinks ActivePresentation.slides
     MsgBox "Reset complete:" & vbCrLf & vbCrLf & _
            "Formatting, Objects, Tables, Hyperlinks (All)", _
            vbInformation, "Reset"
 End Sub
 
 Public Sub RunResetFormat()
-    ResetFormat
-    MsgBox "Reset complete: Formatting", vbInformation, "Reset"
+    ResetFormat ActivePresentation.slides
+    MsgBox "Reset complete: Formatting (All Slides)", vbInformation, "Reset"
 End Sub
 
 Public Sub RunResetObject()
-    ResetObject
-    MsgBox "Reset complete: Objects", vbInformation, "Reset"
+    ResetObject ActivePresentation.slides
+    MsgBox "Reset complete: Objects (All Slides)", vbInformation, "Reset"
 End Sub
 
 Public Sub RunResetTables()
-    ResetTables
-    MsgBox "Reset complete: Tables", vbInformation, "Reset"
+    ResetTables ActivePresentation.slides
+    MsgBox "Reset complete: Tables (All Slides)", vbInformation, "Reset"
 End Sub
 
 Public Sub RunResetHyperlinks()
-    ResetHyperlinks
-    MsgBox "Reset complete: Hyperlinks", vbInformation, "Reset"
+    ResetHyperlinks ActivePresentation.slides
+    MsgBox "Reset complete: Hyperlinks (All Slides)", vbInformation, "Reset"
 End Sub
 
+' -----------------------------------------------------------------------------
+' SELECTION-SCOPED (selected slides only)
+' -----------------------------------------------------------------------------
+
+Public Sub SelResetFormat()
+    Dim sel As SlideRange
+    If Not GetSelectedSlides(sel) Then Exit Sub
+    ResetFormat sel
+    MsgBox "Reset complete: Formatting (" & sel.Count & " slide(s))", vbInformation, "Reset"
+End Sub
+
+Public Sub SelResetObject()
+    Dim sel As SlideRange
+    If Not GetSelectedSlides(sel) Then Exit Sub
+    ResetObject sel
+    MsgBox "Reset complete: Objects (" & sel.Count & " slide(s))", vbInformation, "Reset"
+End Sub
+
+Public Sub SelResetTables()
+    Dim sel As SlideRange
+    If Not GetSelectedSlides(sel) Then Exit Sub
+    ResetTables sel
+    MsgBox "Reset complete: Tables (" & sel.Count & " slide(s))", vbInformation, "Reset"
+End Sub
+
+Public Sub SelResetHyperlinks()
+    Dim sel As SlideRange
+    If Not GetSelectedSlides(sel) Then Exit Sub
+    ResetHyperlinks sel
+    MsgBox "Reset complete: Hyperlinks (" & sel.Count & " slide(s))", vbInformation, "Reset"
+End Sub
+
+' -----------------------------------------------------------------------------
+' HELPER: Get selected slides (returns False if none selected)
+' -----------------------------------------------------------------------------
+
+Private Function GetSelectedSlides(ByRef sel As SlideRange) As Boolean
+    On Error GoTo NoSelection
+    Set sel = ActiveWindow.Selection.SlideRange
+    If sel.Count = 0 Then GoTo NoSelection
+    GetSelectedSlides = True
+    Exit Function
+NoSelection:
+    MsgBox "Please select one or more slides first.", vbExclamation, "Reset"
+    GetSelectedSlides = False
+End Function
 
 ' ===========================================================================
-'  RESET SUBS (Private)
+'  RESET SUBS (Private) - accept any slide collection
 ' ===========================================================================
 
-Private Sub ResetFormat()
-' Clears all direct character formatting from every text frame
-' in every shape on every slide, reverting to the slide-master style.
-
+Private Sub ResetFormat(slides As Object)
     Dim sld As Slide
     Dim shp As Shape
     Dim tf As TextFrame2
     Dim r As Long
 
     On Error Resume Next
-    For Each sld In ActivePresentation.Slides
+    For Each sld In slides
         For Each shp In sld.Shapes
             If shp.HasTextFrame Then
                 Set tf = shp.TextFrame2
                 If tf.HasText Then
-                    ' Reset each run to inherit from theme/master
                     For r = 1 To tf.TextRange.Runs.Count
                         With tf.TextRange.Runs(r).Font
                             .Bold = msoFalse
@@ -77,18 +124,15 @@ Private Sub ResetFormat()
         Next shp
     Next sld
     On Error GoTo 0
-
 End Sub
 
 
-Private Sub ResetObject()
-' Resets all pictures / inline shapes to their original size.
-
+Private Sub ResetObject(slides As Object)
     Dim sld As Slide
     Dim shp As Shape
 
     On Error Resume Next
-    For Each sld In ActivePresentation.Slides
+    For Each sld In slides
         For Each shp In sld.Shapes
             If shp.Type = msoPicture Or shp.Type = msoLinkedPicture Then
                 shp.ScaleHeight 1, msoTrue
@@ -97,13 +141,10 @@ Private Sub ResetObject()
         Next shp
     Next sld
     On Error GoTo 0
-
 End Sub
 
 
-Private Sub ResetTables()
-' Resets table cell padding and applies thin borders to all tables.
-
+Private Sub ResetTables(slides As Object)
     Dim sld As Slide
     Dim shp As Shape
     Dim tbl As Table
@@ -111,7 +152,7 @@ Private Sub ResetTables()
     Dim cel As Cell
 
     On Error Resume Next
-    For Each sld In ActivePresentation.Slides
+    For Each sld In slides
         For Each shp In sld.Shapes
             If shp.HasTable Then
                 Set tbl = shp.Table
@@ -124,7 +165,6 @@ Private Sub ResetTables()
                             .MarginLeft = CmToPt(0.19)
                             .MarginRight = CmToPt(0.19)
                         End With
-                        ' Borders
                         Dim bdr As Long
                         For bdr = ppBorderTop To ppBorderDiagonalUp
                             With cel.Borders(bdr)
@@ -144,35 +184,28 @@ Private Sub ResetTables()
         Next shp
     Next sld
     On Error GoTo 0
-
 End Sub
 
 
-Private Sub ResetHyperlinks()
-' Removes all hyperlinks from the active presentation.
-
+Private Sub ResetHyperlinks(slides As Object)
     Dim sld As Slide
     Dim shp As Shape
     Dim tf As TextFrame
     Dim tr As TextRange
-    Dim hl As Hyperlink
     Dim i As Long
 
     On Error Resume Next
-    For Each sld In ActivePresentation.Slides
-        ' Shape-level hyperlinks (click actions)
+    For Each sld In slides
         For Each shp In sld.Shapes
             If shp.ActionSettings(ppMouseClick).Hyperlink.Address <> "" Then
                 shp.ActionSettings(ppMouseClick).Hyperlink.Address = ""
                 shp.ActionSettings(ppMouseClick).Hyperlink.SubAddress = ""
             End If
 
-            ' Text-level hyperlinks
             If shp.HasTextFrame Then
                 Set tf = shp.TextFrame
                 If tf.HasText Then
                     Set tr = tf.TextRange
-                    ' Walk hyperlinks in reverse to avoid index issues
                     For i = tr.ActionSettings.Count To 1 Step -1
                         tr.ActionSettings(i).Hyperlink.Address = ""
                         tr.ActionSettings(i).Hyperlink.SubAddress = ""
@@ -182,7 +215,5 @@ Private Sub ResetHyperlinks()
         Next shp
     Next sld
     On Error GoTo 0
-
 End Sub
-
 

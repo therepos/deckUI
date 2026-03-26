@@ -1,9 +1,10 @@
+Attribute VB_Name = "Subs"
 Option Explicit
 
 ' =============================================================================
 ' MODULE: Subs
 ' Purpose: General formatting operations for PowerPoint presentations.
-'          Works across ALL text in every slide â€” regular shapes, tables,
+'          Works across ALL text in every slide — regular shapes, tables,
 '          grouped shapes, and placeholders.
 '
 ' Uses TextFrame / TextRange (not TextFrame2) for reliability.
@@ -16,7 +17,7 @@ Option Explicit
 
 Sub DeckFontSizeDecrease()
     Dim sld As Slide
-    For Each sld In ActivePresentation.Slides
+    For Each sld In ActivePresentation.slides
         Dim shp As Shape
         For Each shp In sld.Shapes
             AdjustShapeFontSize shp, -1
@@ -26,7 +27,7 @@ End Sub
 
 Sub DeckFontSizeIncrease()
     Dim sld As Slide
-    For Each sld In ActivePresentation.Slides
+    For Each sld In ActivePresentation.slides
         Dim shp As Shape
         For Each shp In sld.Shapes
             AdjustShapeFontSize shp, 1
@@ -91,7 +92,7 @@ End Sub
 
 Sub DeckSpacingSingle()
     Dim sld As Slide
-    For Each sld In ActivePresentation.Slides
+    For Each sld In ActivePresentation.slides
         Dim shp As Shape
         For Each shp In sld.Shapes
             ApplyShapeSingleSpacing shp
@@ -185,7 +186,7 @@ End Sub
 
 Private Sub ApplyFontToDeck(f As String)
     Dim sld As Slide
-    For Each sld In ActivePresentation.Slides
+    For Each sld In ActivePresentation.slides
         Dim shp As Shape
         For Each shp In sld.Shapes
             ApplyShapeFont shp, f
@@ -231,7 +232,7 @@ Private Sub ApplyShapeFont(shp As Shape, f As String)
 End Sub
 
 
-' ===== NUMBER FORMATTING â€” WORKS ON SELECTED TEXT ============================
+' ===== NUMBER FORMATTING — WORKS ON SELECTED TEXT ============================
 
 Public Sub SelFormatNumNoDecimal()
     SavePref "LastNumFmt", "#,##0"
@@ -258,7 +259,6 @@ Public Sub SelFormatNumRepeat()
 End Sub
 
 Private Sub FormatSelectedNumbers(fmt As String, prefix As String)
-
     Dim sel As Selection
     Dim tr As TextRange
     Dim cellText As String
@@ -266,23 +266,41 @@ Private Sub FormatSelectedNumbers(fmt As String, prefix As String)
 
     Set sel = ActiveWindow.Selection
 
-    ' --- Case 1: Text selected in a shape or table cell ---
+    ' --- Case 1: Text selected (includes multi-cell table selection) ---
     If sel.Type = ppSelectionText Then
-        Set tr = sel.TextRange
-        cellText = CleanNumericText(tr.Text)
-        If IsNumeric(cellText) And Len(cellText) > 0 Then
-            val = CDbl(cellText)
-            tr.Text = FormatValue(val, fmt, prefix)
+        ' Check if we're inside a table
+        If sel.ShapeRange(1).HasTable Then
+            Dim tbl As Table
+            Set tbl = sel.ShapeRange(1).Table
+            Dim r As Long, c As Long
+            For r = 1 To tbl.Rows.Count
+                For c = 1 To tbl.Columns.Count
+                    If tbl.Cell(r, c).Selected Then
+                        Set tr = tbl.Cell(r, c).Shape.TextFrame.TextRange
+                        cellText = CleanNumericText(tr.Text)
+                        If IsNumeric(cellText) And Len(cellText) > 0 Then
+                            val = CDbl(cellText)
+                            tr.Text = FormatValue(val, fmt, prefix)
+                            tr.ParagraphFormat.Alignment = ppAlignRight
+                        End If
+                    End If
+                Next c
+            Next r
+        Else
+            ' Regular text box selection
+            Set tr = sel.TextRange
+            cellText = CleanNumericText(tr.Text)
+            If IsNumeric(cellText) And Len(cellText) > 0 Then
+                val = CDbl(cellText)
+                tr.Text = FormatValue(val, fmt, prefix)
+            End If
         End If
         Exit Sub
     End If
 
-    ' --- Case 2: A table shape is selected â€” format all cells ---
+    ' --- Case 2: Entire table shape selected — format all cells ---
     If sel.Type = ppSelectionShapes Then
         Dim shp As Shape
-        Dim tbl As Table
-        Dim r As Long, c As Long
-
         For Each shp In sel.ShapeRange
             If shp.HasTable Then
                 Set tbl = shp.Table
@@ -300,11 +318,10 @@ Private Sub FormatSelectedNumbers(fmt As String, prefix As String)
             End If
         Next shp
     End If
-
 End Sub
 
 
-' ===== DATE FORMATTING â€” WORKS ON SELECTED TEXT ==============================
+' ===== DATE FORMATTING — WORKS ON SELECTED TEXT ==============================
 
 Public Sub SelFormatDateShort()
     SavePref "LastDateFmt", "DD-MMM-YY"
@@ -337,7 +354,7 @@ Private Sub FormatSelectedDates(fmt As String)
         Exit Sub
     End If
 
-    ' Table shape selected â€” format all cells
+    ' Table shape selected — format all cells
     If sel.Type = ppSelectionShapes Then
         Dim shp As Shape
         Dim tbl As Table
@@ -404,4 +421,4 @@ Private Function GetPref(key As String, defaultVal As String) As String
     GetPref = GetSetting("DeckUI", "Preferences", key, defaultVal)
 End Function
 
-'  
+
